@@ -3,969 +3,1008 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>微信广告数据配置工具</title>
+    <title>WMAM - 微信广告数据管理</title>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <style>
+        :root {
+            --bg-primary: #fafafa;
+            --bg-secondary: #fafafa;
+            --bg-card: #ffffff;
+            --bg-hover: #ebebeb;
+            --text-primary: #000000;
+            --text-secondary: #666666;
+            --text-muted: #999999;
+            --sidebar-text: #4d4d4d;
+            --sidebar-text-active: #171717;
+            --border: #e5e5e5;
+            --accent: #000000;
+            --accent-hover: #333333;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --toggle-on-bg: #171717;
+            --toggle-off-bg: #e5e5e5;
+            --toggle-thumb: #ffffff;
+            --toggle-thumb-on: #ffffff;
+            --sidebar-width: 240px;
+            --header-height: 64px;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-card: #111111;
+            --bg-hover: #1f1f1f;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --sidebar-text: #a1a1aa;
+            --sidebar-text-active: #ffffff;
+            --border: #27272a;
+            --accent: #ffffff;
+            --accent-hover: #e5e5e5;
+            --toggle-on-bg: #e5e5e5;
+            --toggle-off-bg: #171717;
+            --toggle-thumb: #ffffff;
+            --toggle-thumb-on: #171717;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
-            padding: 0;
         }
 
-        .header {
-            background: rgba(15, 23, 42, 0.95);
-            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+        #login-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
 
-        .header-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px 30px;
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         }
 
-        .header h1 {
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .login-logo {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+        }
+
+        .login-title {
             font-size: 24px;
             font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            margin-bottom: 8px;
         }
 
-        .wechat-logo {
-            width: 30px;
-            height: 30px;
-        }
-
-        .tabs {
-            display: flex;
-            gap: 8px;
-        }
-
-        .tab {
-            padding: 10px 20px;
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(51, 65, 85, 0.5);
-            color: #94a3b8;
-            cursor: pointer;
-            border-radius: 8px;
-            transition: all 0.3s;
+        .login-subtitle {
+            color: var(--text-secondary);
             font-size: 14px;
-            font-weight: 500;
-        }
-
-        .tab:hover {
-            background: rgba(59, 130, 246, 0.1);
-            color: #cbd5e1;
-        }
-
-        .tab.active {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            color: white;
-            border-color: #3b82f6;
-        }
-
-        .content {
-            padding: 30px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .tab-content {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .card {
-            background: rgba(30, 41, 59, 0.8);
-            border: 1px solid rgba(51, 65, 85, 0.5);
-            border-radius: 16px;
-            padding: 25px;
-        }
-
-        .card-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #f1f5f9;
-            margin-bottom: 25px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
 
         .form-group {
             margin-bottom: 20px;
         }
 
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        label {
+        .form-label {
             display: block;
             margin-bottom: 8px;
-            color: #94a3b8;
             font-size: 13px;
             font-weight: 500;
+            color: var(--text-secondary);
         }
 
-        input {
+        .form-input {
             width: 100%;
-            padding: 12px 16px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(51, 65, 85, 0.5);
+            padding: 12px 14px;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border);
             border-radius: 8px;
-            color: #e2e8f0;
             font-size: 14px;
-            transition: all 0.3s;
-        }
-
-        input:focus {
+            color: var(--text-primary);
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            transition: border-color 0.2s ease;
         }
 
-        input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .password-container {
-            position: relative;
-        }
-
-        .password-toggle {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-            color: #64748b;
-            font-size: 18px;
-            transition: color 0.3s;
-        }
-
-        .password-toggle:hover {
-            color: #94a3b8;
+        .form-input:focus {
+            border-color: var(--accent);
         }
 
         .btn {
-            padding: 12px 24px;
+            width: 100%;
+            padding: 12px;
             border: none;
             border-radius: 8px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s ease;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            color: white;
+            background-color: var(--accent);
+            color: var(--bg-primary);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
         }
 
-        .btn-secondary {
-            background: rgba(51, 65, 85, 0.5);
-            color: #cbd5e1;
-            border: 1px solid rgba(71, 85, 105, 0.5);
-        }
-
-        .btn-secondary:hover {
-            background: rgba(71, 85, 105, 0.7);
-        }
-
-        .status {
-            margin-top: 15px;
-            padding: 12px 16px;
+        .theme-toggle-login {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 36px;
+            height: 36px;
+            border: none;
             border-radius: 8px;
-            font-size: 13px;
-        }
-
-        .status.success {
-            background: rgba(22, 163, 74, 0.1);
-            border: 1px solid rgba(22, 163, 74, 0.3);
-            color: #22c55e;
-        }
-
-        .status.error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-
-        .status.pending {
-            background: rgba(250, 204, 21, 0.1);
-            border: 1px solid rgba(250, 204, 21, 0.3);
-            color: #facc15;
-        }
-
-        .mini-program-list {
+            background-color: transparent;
             display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle-login:hover {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        #main-app {
+            display: none;
             flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            height: var(--header-height);
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
             gap: 12px;
         }
 
-        .mini-program-card {
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(51, 65, 85, 0.5);
-            border-radius: 12px;
-            padding: 18px;
+        .app-logo {
+            width: 32px;
+            height: 32px;
         }
 
-        .mini-program-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .mini-program-name {
+        .app-title {
+            font-size: 16px;
             font-weight: 600;
-            color: #f1f5f9;
-            font-size: 15px;
         }
 
-        .mini-program-actions {
+        .header-right {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 16px;
         }
 
-        .action-btn {
-            padding: 6px 12px;
-            background: rgba(51, 65, 85, 0.5);
-            border: 1px solid rgba(71, 85, 105, 0.5);
-            border-radius: 6px;
-            color: #cbd5e1;
-            font-size: 12px;
+        .theme-toggle {
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 8px;
+            background-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
-            transition: all 0.2s;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
         }
 
-        .action-btn:hover {
-            background: rgba(71, 85, 105, 0.7);
+        .theme-toggle:hover {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
         }
 
-        .mini-program-detail {
-            color: #64748b;
+        .user-menu {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: var(--bg-hover);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 16px 0;
+            flex-shrink: 0;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 20px;
+            cursor: pointer;
+            color: var(--sidebar-text);
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background-color: var(--bg-hover);
+            color: var(--sidebar-text-active);
+        }
+
+        .nav-item.active {
+            background-color: var(--bg-hover);
+            color: var(--sidebar-text-active);
+            border-left-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            max-width: 1080px;
+            margin: 0 auto;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--toggle-off-bg);
+            transition: 0.3s;
+            border-radius: 26px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: var(--toggle-thumb);
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: var(--toggle-on-bg);
+        }
+        
+        input:checked + .toggle-slider:before {
+            background-color: var(--toggle-thumb-on);
+            transform: translateX(22px);
+        }
+        
+        .btn.btn-small {
+            padding: 10px 8px;
+            font-size: 13px;
+            width: 80px !important;
+            height: 40px !important;
+            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        
+        .log-small-text {
+            font-size: 13px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .quick-action {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .quick-action-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px 20px;
+            width: auto;
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .btn-danger {
+            background-color: var(--error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .page-content {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .table th,
+        .table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .table tr:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
             font-size: 12px;
-            margin-bottom: 6px;
-        }
-
-        .mini-program-detail span {
-            color: #94a3b8;
             font-weight: 500;
         }
 
+        .badge-success {
+            background-color: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+        }
+
+        .badge-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .badge-error {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
         .log-container {
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid rgba(51, 65, 85, 0.5);
-            border-radius: 12px;
-            padding: 20px;
-            height: 400px;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            height: 300px;
             overflow-y: auto;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 13px;
             line-height: 1.6;
+            margin-top: 16px;
         }
 
-        .log-info {
-            color: #94a3b8;
+        .log-line {
             margin-bottom: 4px;
         }
 
-        .log-success {
-            color: #22c55e;
-            margin-bottom: 4px;
-        }
-
-        .log-error {
-            color: #ef4444;
-            margin-bottom: 4px;
-        }
-
-        .log-warning {
-            color: #facc15;
-            margin-bottom: 4px;
-        }
+        .log-info { color: var(--text-secondary); }
+        .log-success { color: var(--success); }
+        .log-error { color: var(--error); }
+        .log-warning { color: var(--warning); }
 
         .progress-container {
-            background: rgba(30, 41, 59, 0.6);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(51, 65, 85, 0.5);
+            margin-top: 16px;
         }
 
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .progress-title {
-            font-weight: 600;
-            color: #cbd5e1;
-        }
-
-        .progress-percent {
-            font-weight: 700;
-            color: #3b82f6;
-            font-size: 16px;
-        }
-
-        .progress-bar-wrapper {
-            height: 12px;
-            background: rgba(30, 41, 59, 0.9);
-            border-radius: 6px;
+        .progress-bar-bg {
+            height: 8px;
+            background-color: var(--bg-hover);
+            border-radius: 4px;
             overflow: hidden;
-            margin-bottom: 10px;
         }
 
         .progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, #3b82f6, #2563eb);
-            width: 0%;
+            background-color: var(--accent);
+            border-radius: 4px;
             transition: width 0.3s ease;
-            border-radius: 6px;
         }
 
-        .progress-status {
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
         }
 
         .modal-overlay {
+            display: none;
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
+            background-color: rgba(0, 0, 0, 0.5);
             align-items: center;
             justify-content: center;
             z-index: 1000;
         }
 
         .modal {
-            background: rgba(30, 41, 59, 0.98);
-            border-radius: 16px;
-            padding: 25px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
             width: 90%;
-            max-width: 450px;
-            border: 1px solid rgba(51, 65, 85, 0.5);
+            max-width: 480px;
         }
 
-        .modal h3 {
+        .modal-title {
             font-size: 18px;
+            font-weight: 600;
             margin-bottom: 20px;
         }
 
         .modal-actions {
             display: flex;
-            gap: 10px;
             justify-content: flex-end;
-            margin-top: 20px;
+            gap: 12px;
+            margin-top: 24px;
         }
 
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 40px;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
         }
 
         @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
+            .sidebar {
+                width: 60px;
             }
-
-            .tabs {
-                flex-wrap: wrap;
+            .nav-item span {
+                display: none;
+            }
+            .nav-item {
+                justify-content: center;
+                padding: 12px 0;
+            }
+            .main-content {
+                padding: 16px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-content">
-            <h1>
-                <svg class="wechat-logo" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M337.387283 341.82659c-17.757225 0-35.514451 11.83815-35.514451 29.595375s17.757225 29.595376 35.514451 29.595376 29.595376-11.83815 29.595376-29.595376c0-18.49711-11.83815-29.595376-29.595376-29.595375zM577.849711 513.479769c-11.83815 0-22.936416 12.578035-22.936416 23.6763 0 12.578035 11.83815 23.676301 22.936416 23.676301 17.757225 0 29.595376-11.83815 29.595376-23.676301s-11.83815-23.676301-29.595376-23.6763zM501.641618 401.017341c17.757225 0 29.595376-12.578035 29.595376-29.595376 0-17.757225-11.83815-29.595376-29.595376-29.595375s-35.514451 11.83815-35.51445 29.595375 17.757225 29.595376 35.51445 29.595376zM706.589595 513.479769c-11.83815 0-22.936416 12.578035-22.936416 23.6763 0 12.578035 11.83815 23.676301 22.936416 23.676301 17.757225 0 29.595376-11.83815 29.595376-23.676301s-11.83815-23.676301-29.595376-23.6763z" fill="#28C445"/>
-                    <path d="M510.520231 2.959538C228.624277 2.959538 0 231.583815 0 513.479769s228.624277 510.520231 510.520231 510.520231 510.520231-228.624277 510.520231-510.520231-228.624277-510.520231-510.520231-510.520231zM413.595376 644.439306c-29.595376 0-53.271676-5.919075-81.387284-12.578034l-81.387283 41.433526 22.936416-71.768786c-58.450867-41.433526-93.965318-95.445087-93.965317-159.815029 0-113.202312 105.803468-201.988439 233.803468-201.98844 114.682081 0 216.046243 71.028902 236.023121 166.473989-7.398844-0.739884-14.797688-1.479769-22.196532-1.479769-110.982659 1.479769-198.289017 85.086705-198.289017 188.67052 0 17.017341 2.959538 33.294798 7.398844 49.572255-7.398844 0.739884-15.537572 1.479769-22.936416 1.479768z m346.265896 82.867052l17.757225 59.190752-63.630058-35.514451c-22.936416 5.919075-46.612717 11.83815-70.289017 11.83815-111.722543 0-199.768786-76.947977-199.768786-172.393063-0.739884-94.705202 87.306358-171.653179 198.289017-171.65318 105.803468 0 199.028902 77.687861 199.028902 172.393064 0 53.271676-34.774566 100.624277-81.387283 136.138728z" fill="#28C445"/>
-                </svg>
-                微信广告数据配置工具
-            </h1>
-            <div class="tabs">
-                <button class="tab active" data-tab="database">数据库</button>
-                <button class="tab" data-tab="programs">小程序</button>
-                <button class="tab" data-tab="basic">基础配置</button>
-                <button class="tab" data-tab="logs">执行日志</button>
+    <div id="login-page">
+        <button class="theme-toggle-login" id="theme-toggle-login">
+            <i data-lucide="sun" class="theme-icon"></i>
+        </button>
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-title">WMAM</div>
+                <div class="login-subtitle">微信广告数据管理系统</div>
             </div>
+            <div class="form-group">
+                <label class="form-label">用户名</label>
+                <input type="text" class="form-input" id="login-username" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label class="form-label">密码</label>
+                <input type="password" class="form-input" id="login-password" placeholder="请输入密码">
+            </div>
+            <button class="btn btn-primary" id="login-btn">登录</button>
         </div>
     </div>
 
-    <div class="content">
-        <!-- 数据库配置 -->
-        <div id="tab-database" class="tab-content">
-            <div class="card">
-                <div class="card-title">📦 数据库配置</div>
-                <div class="form-group">
-                    <label>主机地址</label>
-                    <input type="text" id="db-host" placeholder="localhost">
+    <div id="main-app">
+        <div class="header">
+            <div class="header-left">
+                <span class="app-title">WMAM</span>
+            </div>
+            <div class="header-right">
+                <button class="theme-toggle" id="theme-toggle">
+                    <i data-lucide="sun" class="theme-icon"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div style="display: flex; flex: 1;">
+            <div class="sidebar" id="sidebar">
+                <div class="nav-item active" data-page="dashboard">
+                    <i data-lucide="layout-dashboard" class="nav-icon"></i>
+                    <span>仪表盘</span>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>端口号</label>
-                        <input type="text" id="db-port" placeholder="3306">
+                <div class="nav-item" data-page="programs">
+                    <i data-lucide="smartphone" class="nav-icon"></i>
+                    <span>小程序</span>
+                </div>
+                <div class="nav-item" data-page="execute">
+                    <i data-lucide="play" class="nav-icon"></i>
+                    <span>执行拉取</span>
+                </div>
+                <div class="nav-item" data-page="logs">
+                    <i data-lucide="file-text" class="nav-icon"></i>
+                    <span>操作日志</span>
+                </div>
+                <div class="nav-item" data-page="database">
+                        <i data-lucide="database" class="nav-icon"></i>
+                        <span>数据库配置</span>
                     </div>
-                    <div class="form-group">
-                        <label>数据库名</label>
-                        <input type="text" id="db-name" placeholder="ad_data">
+                    <div class="nav-item" data-page="users">
+                        <i data-lucide="users" class="nav-icon"></i>
+                        <span>用户管理</span>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>用户名</label>
-                        <input type="text" id="db-user" placeholder="root">
-                    </div>
-                    <div class="form-group">
-                        <label>密码</label>
-                        <div class="password-container">
-                            <input type="password" id="db-password" placeholder="请输入密码">
-                            <span class="password-toggle" id="toggle-password" onclick="togglePassword()">👁️</span>
+            
+            <div class="main-content">
+                <div id="page-dashboard">
+                    <h1 class="page-title">仪表盘</h1>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value">5</div>
+                            <div class="stat-label">用户数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">12</div>
+                            <div class="stat-label">小程序数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">3</div>
+                            <div class="stat-label">今日拉取</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">2小时前</div>
+                            <div class="stat-label">最后拉取</div>
                         </div>
                     </div>
                 </div>
-                <div class="button-group">
-                    <button class="btn btn-primary" id="test-connection">测试连接</button>
-                    <button class="btn btn-secondary" id="save-database">保存配置</button>
-                </div>
-                <div class="status pending" id="connection-status">
-                    📊 连接状态: ⚪ 未测试
-                </div>
-            </div>
-        </div>
 
-        <!-- 基础配置 -->
-        <div id="tab-basic" class="tab-content" style="display: none;">
-            <div class="card">
-                <div class="card-title">⚙️ 基础配置</div>
-                <div class="form-group">
-                    <label>API 地址 🔒</label>
-                    <input type="text" value="https://api.weixin.qq.com/publisher/stat" disabled>
-                    <p style="font-size: 12px; color: #64748b; margin-top: 5px;">微信广告API官方地址，不可修改</p>
-                </div>
-                <div class="form-group">
-                    <label>起始日期 🔒</label>
-                    <input type="date" id="start-date" value="2025-07-01" disabled>
-                    <p style="font-size: 12px; color: #64748b; margin-top: 5px;">数据拉取起始日期，不可修改</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 小程序管理 -->
-        <div id="tab-programs" class="tab-content" style="display: none;">
-            <div class="card">
-                <div class="card-title">📱 小程序管理</div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <span style="color: #94a3b8;">已配置 <span id="program-count" style="color: #3b82f6; font-weight: 600;">0</span> 个小程序</span>
-                    <button class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;" id="add-program-btn">+ 添加小程序</button>
-                </div>
-                <div class="mini-program-list" id="program-list">
-                    <!-- 小程序列表会动态生成 -->
-                </div>
-                <div class="button-group" style="margin-top: 15px;">
-                    <button class="btn btn-secondary" id="save-programs">保存配置</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 执行日志 -->
-        <div id="tab-logs" class="tab-content" style="display: none;">
-            <div class="card">
-                <div style="display: flex; justify-content: flex-end; margin-bottom: 20px; gap: 10px;">
-                    <button class="action-btn" id="export-config">导出配置</button>
-                    <button class="action-btn" id="import-config">导入配置</button>
-                </div>
-                
-                <!-- 进度条 -->
-                <div class="progress-container" id="progress-container">
-                    <div class="progress-header">
-                        <span class="progress-title">📊 任务进度</span>
-                        <span class="progress-percent" id="progress-percent">0%</span>
+                <div id="page-programs" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h1 class="page-title">小程序管理</h1>
+                        <button class="btn btn-secondary" id="add-program-btn" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                            添加小程序
+                        </button>
                     </div>
-                    <div class="progress-bar-wrapper">
-                        <div class="progress-bar" id="progress-bar"></div>
+                    <div class="page-content">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>名称</th>
+                                    <th>AppID</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                <td class="log-small-text">小程序 A</td>
+                                <td>wx1234567890abcdef</td>
+                                    <td>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </td>
+                                    <td>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="btn btn-secondary btn-small">编辑</button>
+                                            <button class="btn btn-danger btn-small">删除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                <td class="log-small-text">小程序 B</td>
+                                <td>wxabcdef1234567890</td>
+                                    <td>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </td>
+                                    <td>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="btn btn-secondary btn-small">编辑</button>
+                                            <button class="btn btn-danger btn-small">删除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="progress-status" id="progress-status">任务待执行</div>
                 </div>
-                
-                <div class="card-title">📜 执行日志</div>
-                <div class="log-container" id="log-container">
-                    <div class="log-info">> 等待执行...</div>
+
+                <div id="page-execute" style="display: none;">
+                    <h1 class="page-title">执行拉取</h1>
+                    <div class="page-content">
+                        <div class="progress-container">
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar" style="width: 65%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span>任务进度</span>
+                                <span>65%</span>
+                            </div>
+                        </div>
+                        <div class="btn-group" style="margin-top: 20px;">
+                            <button class="btn btn-primary" id="btn-start" style="width: 120px; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <i data-lucide="play" style="width: 16px; height: 16px;"></i>
+                                <span>开始拉取</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-stop" style="width: 120px; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <i data-lucide="square" style="width: 16px; height: 16px;"></i>
+                                <span>中断拉取</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-resume" style="width: 120px; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <i data-lucide="play" style="width: 16px; height: 16px;"></i>
+                                <span>继续拉取</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-restart" style="width: 120px; height: 40px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <i data-lucide="rotate-cw" style="width: 16px; height: 16px;"></i>
+                                <span>重新拉取</span>
+                            </button>
+                        </div>
+                        <div class="log-container" id="log-container">
+                            <div class="log-line log-info">[2024-01-15 14:30:00] 系统准备就绪</div>
+                            <div class="log-line log-info">[2024-01-15 14:30:01] 开始拉取小程序数据...</div>
+                            <div class="log-line log-success">[2024-01-15 14:30:05] ✅ 数据拉取成功</div>
+                            <div class="log-line log-info">[2024-01-15 14:30:11] 数据拉取完成</div>
+                        </div>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button class="btn btn-secondary" id="clear-logs">清空日志</button>
-                    <div style="display: flex; gap: 10px; margin-left: auto;">
-                        <button class="btn btn-secondary" id="stop-execution" disabled>中断执行</button>
-                        <button class="btn btn-primary" id="start-execution">开始执行</button>
+
+                <div id="page-logs" style="display: none;">
+                    <h1 class="page-title">操作日志</h1>
+                    <div class="page-content">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>用户</th>
+                                    <th>操作</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>2024-01-15 14:30:11</td>
+                                    <td class="log-small-text">管理员</td>
+                                    <td class="log-small-text">执行数据拉取</td>
+                                    <td><span class="badge badge-success"><i data-lucide="check" style="width: 12px; height: 12px;"></i> 成功</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2024-01-15 12:15:30</td>
+                                    <td class="log-small-text">用户A</td>
+                                    <td class="log-small-text">执行数据拉取</td>
+                                    <td><span class="badge badge-success"><i data-lucide="check" style="width: 12px; height: 12px;"></i> 成功</span></td>
+                                </tr>
+                                <tr>
+                                    <td>2024-01-15 10:00:00</td>
+                                    <td class="log-small-text">管理员</td>
+                                    <td class="log-small-text">添加小程序</td>
+                                    <td><span class="badge badge-success"><i data-lucide="check" style="width: 12px; height: 12px;"></i> 成功</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="page-users" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h1 class="page-title">用户管理</h1>
+                        <button class="btn btn-secondary" id="add-user-btn" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                            添加用户
+                        </button>
+                    </div>
+                    <div class="page-content">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>用户名</th>
+                                    <th>角色</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>admin</td>
+                                    <td><span class="badge badge-warning"><i data-lucide="shield" style="width: 12px; height: 12px;"></i> 管理员</span></td>
+                                    <td>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-small">编辑</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>userA</td>
+                                    <td><span class="badge badge-info" style="background-color: rgba(59, 130, 246, 0.1); color: #3b82f6;"><i data-lucide="user" style="width: 12px; height: 12px;"></i> 普通用户</span></td>
+                                    <td>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" checked>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </td>
+                                    <td>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="btn btn-secondary btn-small">编辑</button>
+                                            <button class="btn btn-danger btn-small">禁用</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="page-database" style="display: none;">
+                    <h1 class="page-title">数据库配置</h1>
+                    <div class="page-content">
+                        <div class="form-group">
+                            <label class="form-label">主机地址</label>
+                            <input type="text" class="form-input" id="db-host" value="******************" readonly>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="form-group">
+                                <label class="form-label">端口号</label>
+                                <input type="text" class="form-input" id="db-port" value="****" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">数据库名</label>
+                                <input type="text" class="form-input" id="db-name" value="*******" readonly>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="form-group">
+                                <label class="form-label">用户名</label>
+                                <input type="text" class="form-input" id="db-user" value="********" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">密码</label>
+                                <input type="text" class="form-input" id="db-password" value="****************" readonly>
+                            </div>
+                        </div>
+                        <div class="btn-group" id="admin-db-buttons" style="margin-top: 20px;">
+                            <button class="btn btn-primary" id="test-db-connection" style="width: 100px; height: 40px; display: flex; align-items: center; justify-content: center;">测试连接</button>
+                            <button class="btn btn-secondary" id="save-db-config" style="width: 100px; height: 40px; display: flex; align-items: center; justify-content: center;">保存配置</button>
+                        </div>
+                        <div style="margin-top: 15px; padding: 12px 16px; border-radius: 8px; font-size: 13px; background-color: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.3); color: #facc15;">
+                            📊 连接状态: ⚪ 未测试
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 添加小程序弹窗 -->
-    <div class="modal-overlay" id="modal-overlay" style="display: none;">
+    <div class="modal-overlay" id="modal-overlay">
         <div class="modal">
-            <h3 id="modal-title">添加小程序</h3>
+            <div class="modal-title" id="modal-title">添加小程序</div>
             <div class="form-group">
-                <label>小程序名称</label>
-                <input type="text" id="new-program-name" placeholder="请输入小程序名称">
+                <label class="form-label">小程序名称</label>
+                <input type="text" class="form-input" placeholder="请输入小程序名称">
             </div>
             <div class="form-group">
-                <label>AppID</label>
-                <input type="text" id="new-program-appid" placeholder="wxXXXXXXXXXXXXXXXX">
+                <label class="form-label">AppID</label>
+                <input type="text" class="form-input" placeholder="wxXXXXXXXXXXXXXXXX">
             </div>
             <div class="form-group">
-                <label>AppSecret</label>
-                <input type="text" id="new-program-secret" placeholder="请输入 AppSecret">
+                <label class="form-label">AppSecret</label>
+                <input type="text" class="form-input" placeholder="请输入 AppSecret">
             </div>
             <div class="modal-actions">
-                <button class="btn btn-secondary" id="cancel-modal">取消</button>
-                <button class="btn btn-primary" id="confirm-modal">确定</button>
+                <button class="btn btn-secondary" id="modal-cancel">取消</button>
+                <button class="btn btn-primary" id="modal-confirm">确定</button>
             </div>
         </div>
     </div>
 
-    <input type="file" id="import-file" accept=".json" style="display: none;">
-
     <script>
-        let miniPrograms = [];
-        let editingIndex = -1;
-        let passwordVisible = false;
-
-        function togglePassword() {
-            const passwordInput = document.getElementById('db-password');
-            const toggleIcon = document.getElementById('toggle-password');
-            
-            if (passwordVisible) {
-                passwordInput.type = 'password';
-                toggleIcon.textContent = '👁️';
-                passwordVisible = false;
-            } else {
-                passwordInput.type = 'text';
-                toggleIcon.textContent = '🙈';
-                passwordVisible = true;
-            }
+        function initTheme() {
+            const saved = localStorage.getItem('theme');
+            const system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            const theme = saved || system;
+            document.documentElement.setAttribute('data-theme', theme);
+            updateThemeIcon();
         }
 
-        // 加载配置
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-
-                document.getElementById('db-host').value = config.database?.host || '';
-                document.getElementById('db-port').value = config.database?.port || '3306';
-                document.getElementById('db-name').value = config.database?.database || '';
-                document.getElementById('db-user').value = config.database?.user || '';
-                document.getElementById('db-password').value = config.database?.password || '';
-
-                miniPrograms = config.miniPrograms || [];
-                renderMiniPrograms();
-            } catch (err) {
-                console.log('首次运行，使用默认配置');
-            }
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            updateThemeIcon();
         }
 
-        // 渲染小程序列表
-        function renderMiniPrograms() {
-            const list = document.getElementById('program-list');
-            const count = document.getElementById('program-count');
-            count.textContent = miniPrograms.length;
-
-            if (miniPrograms.length === 0) {
-                list.innerHTML = '<div style="text-align: center; color: #64748b; padding: 40px;">暂无配置的小程序，点击上方按钮添加</div>';
-                return;
-            }
-
-            list.innerHTML = miniPrograms.map((program, index) => `
-                <div class="mini-program-card">
-                    <div class="mini-program-header">
-                        <span class="mini-program-name">${index + 1}️⃣ ${program.name}</span>
-                        <div class="mini-program-actions">
-                            <button class="action-btn" style="padding: 5px 10px;" onclick="editProgram(${index})">编辑</button>
-                            <button class="action-btn" style="padding: 5px 10px;" onclick="deleteProgram(${index})">删除</button>
-                        </div>
-                    </div>
-                    <div class="mini-program-detail"><span>AppID:</span> ${program.appid}</div>
-                    <div class="mini-program-detail"><span>AppSecret:</span> ${'*'.repeat(program.appsecret?.length || 10)}</div>
-                </div>
-            `).join('');
+        function updateThemeIcon() {
+            const icons = document.querySelectorAll('.theme-icon');
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            icons.forEach(icon => {
+                icon.setAttribute('data-lucide', isDark ? 'moon' : 'sun');
+            });
+            lucide.createIcons();
         }
 
-        // 标签页切换
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-                tab.classList.add('active');
-                document.getElementById(`tab-${tab.dataset.tab}`).style.display = 'block';
+        function navigateTo(pageId) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            document.querySelectorAll('.main-content > div').forEach(page => page.style.display = 'none');
+            document.querySelector(`[data-page="${pageId}"]`).classList.add('active');
+            document.getElementById(`page-${pageId}`).style.display = 'block';
+        }
+
+        document.getElementById('login-btn').addEventListener('click', () => {
+            document.getElementById('login-page').style.display = 'none';
+            document.getElementById('main-app').style.display = 'flex';
+        });
+
+        document.getElementById('theme-toggle-login').addEventListener('click', toggleTheme);
+        document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                navigateTo(item.dataset.page);
             });
         });
 
-        // 测试连接
-        document.getElementById('test-connection').addEventListener('click', async () => {
-            const status = document.getElementById('connection-status');
-            status.className = 'status pending';
-            status.textContent = '📊 连接状态: 🔄 正在连接...';
-
-            const config = {
-                host: document.getElementById('db-host').value,
-                port: parseInt(document.getElementById('db-port').value) || 3306,
-                user: document.getElementById('db-user').value,
-                password: document.getElementById('db-password').value,
-                database: document.getElementById('db-name').value
-            };
-
-            try {
-                const response = await fetch('/api/test-connection', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                const result = await response.json();
-
-                if (result.success) {
-                    status.className = 'status success';
-                    status.textContent = '📊 连接状态: ✅ 连接成功';
-                } else {
-                    status.className = 'status error';
-                    status.textContent = '📊 连接状态: ❌ ' + result.message;
-                }
-            } catch (err) {
-                status.className = 'status error';
-                status.textContent = '📊 连接状态: ❌ 连接失败';
-            }
-        });
-
-        // 保存数据库配置
-        document.getElementById('save-database').addEventListener('click', async () => {
-            const config = {
-                database: {
-                    host: document.getElementById('db-host').value,
-                    port: parseInt(document.getElementById('db-port').value) || 3306,
-                    user: document.getElementById('db-user').value,
-                    password: document.getElementById('db-password').value,
-                    database: document.getElementById('db-name').value
-                }
-            };
-
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    alert('保存失败：' + errorText);
-                    return;
-                }
-                alert('配置已保存');
-            } catch (err) {
-                alert('保存失败：' + (err.message || err));
-            }
-        });
-
-        // 保存小程序配置
-        document.getElementById('save-programs').addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ miniPrograms })
-                });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    alert('保存失败：' + errorText);
-                    return;
-                }
-                alert('配置已保存');
-            } catch (err) {
-                alert('保存失败：' + (err.message || err));
-            }
-        });
-
-        // 添加/编辑小程序
         document.getElementById('add-program-btn').addEventListener('click', () => {
-            editingIndex = -1;
             document.getElementById('modal-title').textContent = '添加小程序';
-            document.getElementById('new-program-name').value = '';
-            document.getElementById('new-program-appid').value = '';
-            document.getElementById('new-program-secret').value = '';
             document.getElementById('modal-overlay').style.display = 'flex';
         });
 
-        window.editProgram = function(index) {
-            editingIndex = index;
-            const program = miniPrograms[index];
-            document.getElementById('modal-title').textContent = '编辑小程序';
-            document.getElementById('new-program-name').value = program.name;
-            document.getElementById('new-program-appid').value = program.appid;
-            document.getElementById('new-program-secret').value = program.appsecret;
-            document.getElementById('modal-overlay').style.display = 'flex';
-        };
-
-        window.deleteProgram = function(index) {
-            if (confirm('确定要删除这个小程序吗？')) {
-                miniPrograms.splice(index, 1);
-                renderMiniPrograms();
-            }
-        };
-
-        document.getElementById('cancel-modal').addEventListener('click', () => {
+        document.getElementById('modal-cancel').addEventListener('click', () => {
             document.getElementById('modal-overlay').style.display = 'none';
         });
 
-        document.getElementById('confirm-modal').addEventListener('click', () => {
-            const name = document.getElementById('new-program-name').value.trim();
-            const appid = document.getElementById('new-program-appid').value.trim();
-            const appsecret = document.getElementById('new-program-secret').value.trim();
-
-            if (!name || !appid || !appsecret) {
-                alert('请填写完整信息');
-                return;
-            }
-
-            const program = { name, appid, appsecret };
-
-            if (editingIndex >= 0) {
-                miniPrograms[editingIndex] = program;
-            } else {
-                miniPrograms.push(program);
-            }
-
-            renderMiniPrograms();
+        document.getElementById('modal-confirm').addEventListener('click', () => {
             document.getElementById('modal-overlay').style.display = 'none';
         });
 
-        let abortController = null;
-
-        // 清空日志
-        document.getElementById('clear-logs').addEventListener('click', () => {
-            // 重置进度条回到初始状态
-            const progressBar = document.getElementById('progress-bar');
-            const progressPercent = document.getElementById('progress-percent');
-            const progressStatus = document.getElementById('progress-status');
-            progressBar.style.width = '0%';
-            progressPercent.textContent = '0%';
-            progressStatus.textContent = '任务待执行';
-            document.getElementById('log-container').innerHTML = '<div class="log-info">> 等待执行...</div>';
-        });
-
-        // 开始执行
-        document.getElementById('start-execution').addEventListener('click', async () => {
-            const logContainer = document.getElementById('log-container');
-            const startBtn = document.getElementById('start-execution');
-            const stopBtn = document.getElementById('stop-execution');
-            logContainer.innerHTML = '<div class="log-info">> 正在加载配置...</div>';
-
-            abortController = new AbortController();
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-
-            // 重置进度条
-            const progressBar = document.getElementById('progress-bar');
-            const progressPercent = document.getElementById('progress-percent');
-            const progressStatus = document.getElementById('progress-status');
-            progressBar.style.width = '0%';
-            progressPercent.textContent = '0%';
-            progressStatus.textContent = '准备中...';
-
-            try {
-                const response = await fetch('/api/execute', { 
-                    method: 'POST',
-                    signal: abortController.signal
-                });
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const text = decoder.decode(value);
-                    const lines = text.split('\n').filter(line => line.trim());
-
-                    lines.forEach(line => {
-                        // 检查是否是进度更新
-                        if (line.startsWith('[PROGRESS]')) {
-                            const parts = line.substring(11).split(' ');
-                            let percent = parseInt(parts[0]);
-                            const statusMsg = parts.slice(1).join(' ');
-                            
-                            // 确保百分比是有效数字
-                            if (isNaN(percent)) {
-                                percent = 0;
-                            } else if (percent < 0) {
-                                percent = 0;
-                            } else if (percent > 100) {
-                                percent = 100;
-                            }
-                            
-                            progressPercent.textContent = `${percent}%`;
-                            progressBar.style.width = `${percent}%`;
-                            progressStatus.textContent = statusMsg;
-                        } else {
-                            // 普通日志
-                            const div = document.createElement('div');
-                            if (line.includes('✅')) div.className = 'log-success';
-                            else if (line.includes('❌') || line.includes('错误')) div.className = 'log-error';
-                            else if (line.includes('⚠️')) div.className = 'log-warning';
-                            else div.className = 'log-info';
-                            div.textContent = line;
-                            logContainer.appendChild(div);
-                        }
-                    });
-
-                    logContainer.scrollTop = logContainer.scrollHeight;
-                }
-            } catch (err) {
-                if (err.name === 'AbortError') {
-                    const div = document.createElement('div');
-                    div.className = 'log-warning';
-                    div.textContent = '⚠️ 执行已中断';
-                    logContainer.appendChild(div);
-                    
-                    // 中断时：进度条保持当前状态，显示任务中断
-                    progressStatus.textContent = '任务中断';
-                } else {
-                    const div = document.createElement('div');
-                    div.className = 'log-error';
-                    div.textContent = '❌ 执行失败: ' + err.message;
-                    logContainer.appendChild(div);
-                    
-                    // 失败时也更新状态
-                    progressStatus.textContent = '任务失败';
-                }
-            } finally {
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                abortController = null;
-            }
-        });
-
-        // 中断执行
-        document.getElementById('stop-execution').addEventListener('click', () => {
-            if (abortController) {
-                abortController.abort();
-                const logContainer = document.getElementById('log-container');
-                const div = document.createElement('div');
-                div.className = 'log-warning';
-                div.textContent = '⚠️ 正在中断执行...';
-                logContainer.appendChild(div);
-            }
-        });
-
-        // 导出配置
-        document.getElementById('export-config').addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-
-                const dataStr = JSON.stringify(config, null, 2);
-                const blob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'config.json';
-                a.click();
-                URL.revokeObjectURL(url);
-            } catch (err) {
-                alert('导出失败');
-            }
-        });
-
-        // 导入配置
-        document.getElementById('import-config').addEventListener('click', () => {
-            document.getElementById('import-file').click();
-        });
-
-        document.getElementById('import-file').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                try {
-                    const config = JSON.parse(event.target.result);
-
-                    if (config.miniPrograms && config.miniPrograms.length > 0) {
-                        for (let i = 0; i < config.miniPrograms.length; i++) {
-                            const program = config.miniPrograms[i];
-                            if (!program.name || !program.appid || !program.appsecret) {
-                                alert(`导入失败：第 ${i + 1} 个小程序配置不完整，请检查名称、AppID和AppSecret`);
-                                return;
-                            }
-                            if (!program.name.trim() || !program.appid.trim() || !program.appsecret.trim()) {
-                                alert(`导入失败：第 ${i + 1} 个小程序配置存在空值，请检查`);
-                                return;
-                            }
-                        }
-                    }
-
-                    const response = await fetch('/api/config', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(config)
-                    });
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        alert('导入失败：' + errorText);
-                        return;
-                    }
-
-                    alert('配置已导入，请刷新页面查看');
-                    location.reload();
-                } catch (err) {
-                    alert('导入失败：无效的配置文件');
-                }
-            };
-            reader.readAsText(file);
-        });
-
-        // 初始化
-        loadConfig();
+        initTheme();
+        lucide.createIcons();
     </script>
 </body>
 </html>
