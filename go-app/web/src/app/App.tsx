@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  CheckCircle2,
+  Circle,
   Database,
   FileClock,
   LogOut,
@@ -34,6 +36,30 @@ const navItems = [
 ];
 
 const sidebarKey = "wmam.ui.sidebarCollapsed";
+const setupDismissKey = "wmam.ui.setupDismissed";
+
+type SetupState = {
+  loaded: boolean;
+  dismissed: boolean;
+  mysqlConfigured: boolean;
+  programConfigured: boolean;
+};
+
+type MySQLSetupResponse = {
+  mysql: {
+    host?: string;
+    database?: string;
+    username?: string;
+    passwordSet?: boolean;
+  };
+};
+
+type ProgramSetupResponse = {
+  programs: Array<{
+    id: number;
+    enabled: boolean;
+  }>;
+};
 
 function ProtectedRoute() {
   const location = useLocation();
@@ -56,12 +82,65 @@ function ProtectedChangePasswordRoute() {
   return <ChangePasswordPage />;
 }
 
+function SetupStep({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      {done ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Circle className="h-4 w-4 text-muted-foreground" />}
+      <span className={done ? "text-muted-foreground" : "font-medium"}>{label}</span>
+    </div>
+  );
+}
+
 function AppLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = getStoredUser();
   const { isDark, toggleTheme } = useTheme();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem(sidebarKey) === "1");
+  const [setup, setSetup] = useState<SetupState>(() => ({
+    loaded: false,
+    dismissed: localStorage.getItem(setupDismissKey) === "1",
+    mysqlConfigured: false,
+    programConfigured: false
+  }));
   const visibleNav = navItems.filter((item) => !item.adminOnly || user?.role === "admin");
+  const showSetupGuide =
+    user?.role === "admin" && setup.loaded && !setup.dismissed && (!setup.mysqlConfigured || !setup.programConfigured);
+
+  useEffect(() => {
+    if (user?.role !== "admin" || setup.dismissed) {
+      return;
+    }
+
+    let active = true;
+    async function loadSetupState() {
+      try {
+        const [mysqlData, programData] = await Promise.all([
+          apiRequest<MySQLSetupResponse>("/api/system/mysql"),
+          apiRequest<ProgramSetupResponse>("/api/programs")
+        ]);
+        if (!active) {
+          return;
+        }
+        const mysql = mysqlData.mysql;
+        setSetup((current) => ({
+          ...current,
+          loaded: true,
+          mysqlConfigured: Boolean(mysql.host && mysql.database && mysql.username && mysql.passwordSet),
+          programConfigured: programData.programs.some((program) => program.enabled)
+        }));
+      } catch {
+        if (active) {
+          setSetup((current) => ({ ...current, loaded: true }));
+        }
+      }
+    }
+
+    void loadSetupState();
+    return () => {
+      active = false;
+    };
+  }, [location.pathname, setup.dismissed, user?.role]);
 
   function toggleSidebar() {
     setIsSidebarCollapsed((current) => {
@@ -164,6 +243,43 @@ function AppLayout() {
         </header>
 
         <main className="mx-auto max-w-[1080px] px-6 py-8">
+          {showSetupGuide ? (
+            <div className="mb-5 rounded-lg border border-border bg-card p-5 text-card-foreground">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold">初始化检查</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">完成这些项目后，WMAM 就可以正式执行拉取。</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    localStorage.setItem(setupDismissKey, "1");
+                    setSetup((current) => ({ ...current, dismissed: true }));
+                  }}
+                >
+                  收起
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <SetupStep done={!user?.must_change_password} label="管理员密码已修改" />
+                <SetupStep done={setup.mysqlConfigured} label="MySQL 已配置" />
+                <SetupStep done={setup.programConfigured} label="小程序已启用" />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {!setup.mysqlConfigured ? (
+                  <Button variant="outline" size="sm" onClick={() => navigate("/app/system")}>
+                    去配置 MySQL
+                  </Button>
+                ) : null}
+                {!setup.programConfigured ? (
+                  <Button variant="outline" size="sm" onClick={() => navigate("/app/programs")}>
+                    去添加小程序
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <Routes>
             <Route path="/fetch" element={<FetchPage />} />
             <Route path="/logs" element={<LogsPage />} />
