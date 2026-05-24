@@ -55,6 +55,97 @@ type JobPermissions struct {
 	CanEnd       bool `json:"canEnd"`
 }
 
+const FetchJobLockTTL = 30 * time.Minute
+
+type fetchJobLockExecutor interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func fetchJobLockExpiresAt(ttl time.Duration) string {
+	return time.Now().Add(ttl).UTC().Format(time.RFC3339)
+}
+
+func expireStaleFetchLocks(exec fetchJobLockExecutor) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	var jobID sql.NullInt64
+	err := exec.QueryRow(`
+SELECT job_id
+FROM fetch_lock
+WHERE id = 1
+  AND job_id IS NOT NULL
+  AND expires_at IS NOT NULL
+  AND expires_at < ?
+`, now).Scan(&jobID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !jobID.Valid {
+		return nil
+	}
+
+	if _, err := exec.Exec(`
+UPDATE fetch_job_steps
+SET status = 'failed',
+    finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+    error_message = CASE WHEN COALESCE(error_message, '') = '' THEN '任务锁已过期' ELSE error_message END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE job_id = ? AND status = 'running'
+`, jobID.Int64); err != nil {
+		return err
+	}
+
+	var total, completed, failed int
+	if err := exec.QueryRow(`
+SELECT COUNT(*),
+       COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0),
+       COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)
+FROM fetch_job_steps
+WHERE job_id = ?
+`, jobID.Int64).Scan(&total, &completed, &failed); err != nil {
+		return err
+	}
+	percent := 0
+	if total > 0 {
+		percent = ((completed + failed) * 100) / total
+	}
+
+	if _, err := exec.Exec(`
+UPDATE fetch_jobs
+SET status = 'failed',
+    total_steps = ?,
+    completed_steps = ?,
+    failed_steps = ?,
+    progress_percent = ?,
+    error_summary = CASE WHEN COALESCE(error_summary, '') = '' THEN '任务锁已过期' ELSE error_summary END,
+    finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ? AND status = 'running'
+`, total, completed, failed, percent, jobID.Int64); err != nil {
+		return err
+	}
+
+	_, err = exec.Exec(`
+UPDATE fetch_lock
+SET job_id = NULL,
+    locked_by_user_id = NULL,
+    locked_by_username = NULL,
+    locked_at = NULL,
+    heartbeat_at = NULL,
+    expires_at = NULL
+WHERE id = 1 AND job_id = ?
+`, jobID.Int64)
+	return err
+}
+
+func ExpireStaleFetchLocks(db *sql.DB) error {
+	return expireStaleFetchLocks(db)
+}
+
 func CreateFetchJob(db *sql.DB, userID int64, username string, programs []MiniProgram) (*FetchJob, error) {
 	if len(programs) == 0 {
 		return nil, errors.New("no enabled mini programs")
@@ -62,6 +153,11 @@ func CreateFetchJob(db *sql.DB, userID int64, username string, programs []MiniPr
 
 	tx, err := db.Begin()
 	if err != nil {
+		return nil, err
+	}
+
+	if err := expireStaleFetchLocks(tx); err != nil {
+		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -112,7 +208,7 @@ ON CONFLICT(id) DO UPDATE SET
     locked_at = CURRENT_TIMESTAMP,
     heartbeat_at = CURRENT_TIMESTAMP,
     expires_at = excluded.expires_at
-`, jobID, userID, username, time.Now().Add(30*time.Minute).Format(time.RFC3339)); err != nil {
+`, jobID, userID, username, fetchJobLockExpiresAt(FetchJobLockTTL)); err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}
@@ -323,11 +419,37 @@ WHERE id = ?
 
 func IsFetchJobRunning(db *sql.DB, jobID int64) (bool, error) {
 	var status string
-	err := db.QueryRow("SELECT status FROM fetch_jobs WHERE id = ?", jobID).Scan(&status)
+	var expiresAt string
+	err := db.QueryRow(`
+SELECT j.status, COALESCE(l.expires_at, '')
+FROM fetch_jobs j
+LEFT JOIN fetch_lock l ON l.id = 1 AND l.job_id = j.id
+WHERE j.id = ?
+`, jobID).Scan(&status, &expiresAt)
 	if err != nil {
 		return false, err
 	}
-	return status == string(jobstate.JobRunning), nil
+	return status == string(jobstate.JobRunning) && expiresAt >= time.Now().UTC().Format(time.RFC3339), nil
+}
+
+func HeartbeatFetchJobLock(db *sql.DB, jobID int64, ttl time.Duration) error {
+	result, err := db.Exec(`
+UPDATE fetch_lock
+SET heartbeat_at = CURRENT_TIMESTAMP,
+    expires_at = ?
+WHERE id = 1 AND job_id = ?
+`, fetchJobLockExpiresAt(ttl), jobID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("job lock is not held")
+	}
+	return nil
 }
 
 func InterruptFetchJob(db *sql.DB, jobID int64) (*FetchJob, error) {
@@ -363,6 +485,10 @@ func ResumeFetchJob(db *sql.DB, jobID int64, userID int64, username string) (*Fe
 
 	tx, err := db.Begin()
 	if err != nil {
+		return nil, err
+	}
+	if err := expireStaleFetchLocks(tx); err != nil {
+		_ = tx.Rollback()
 		return nil, err
 	}
 	var runningCount int
@@ -405,7 +531,7 @@ ON CONFLICT(id) DO UPDATE SET
     locked_at = CURRENT_TIMESTAMP,
     heartbeat_at = CURRENT_TIMESTAMP,
     expires_at = excluded.expires_at
-`, jobID, userID, username, time.Now().Add(30*time.Minute).Format(time.RFC3339)); err != nil {
+`, jobID, userID, username, fetchJobLockExpiresAt(FetchJobLockTTL)); err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}

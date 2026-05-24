@@ -237,6 +237,68 @@ func TestFetchJobStateMachineAndPermissions(t *testing.T) {
 	}
 }
 
+func TestFetchJobLockHeartbeatAndExpiry(t *testing.T) {
+	db, err := OpenSystemDB(t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenSystemDB() error = %v", err)
+	}
+	defer db.Close()
+
+	fieldKey := []byte("12345678901234567890123456789012")
+	if _, err := EnsureDefaultAdmin(db, "hashed-password"); err != nil {
+		t.Fatalf("EnsureDefaultAdmin() error = %v", err)
+	}
+	admin, err := GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	program, err := CreateMiniProgram(db, fieldKey, "Demo", "wx1234567890abcd", "app-secret", true)
+	if err != nil {
+		t.Fatalf("CreateMiniProgram() error = %v", err)
+	}
+
+	job, err := CreateFetchJob(db, admin.ID, admin.Username, []MiniProgram{*program})
+	if err != nil {
+		t.Fatalf("CreateFetchJob() error = %v", err)
+	}
+	if err := HeartbeatFetchJobLock(db, job.ID, time.Hour); err != nil {
+		t.Fatalf("HeartbeatFetchJobLock() error = %v", err)
+	}
+	running, err := IsFetchJobRunning(db, job.ID)
+	if err != nil {
+		t.Fatalf("IsFetchJobRunning() error = %v", err)
+	}
+	if !running {
+		t.Fatal("expected fresh heartbeat to keep job running")
+	}
+
+	if _, err := db.Exec("UPDATE fetch_lock SET expires_at = ? WHERE id = 1", time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)); err != nil {
+		t.Fatalf("expire fetch lock: %v", err)
+	}
+	running, err = IsFetchJobRunning(db, job.ID)
+	if err != nil {
+		t.Fatalf("IsFetchJobRunning(expired) error = %v", err)
+	}
+	if running {
+		t.Fatal("expected expired lock to make job non-running")
+	}
+
+	nextJob, err := CreateFetchJob(db, admin.ID, admin.Username, []MiniProgram{*program})
+	if err != nil {
+		t.Fatalf("CreateFetchJob(after stale lock) error = %v", err)
+	}
+	if nextJob.ID == job.ID || nextJob.Status != "running" {
+		t.Fatalf("expected new running job after stale lock cleanup, got %+v", nextJob)
+	}
+	expiredJob, err := GetFetchJobByID(db, job.ID)
+	if err != nil {
+		t.Fatalf("GetFetchJobByID(expired) error = %v", err)
+	}
+	if expiredJob.Status != "failed" || expiredJob.ErrorSummary != "任务锁已过期" {
+		t.Fatalf("expected stale job to be failed, got %+v", expiredJob)
+	}
+}
+
 func TestEncryptedBackupRoundTrip(t *testing.T) {
 	db, err := OpenSystemDB(t.TempDir())
 	if err != nil {

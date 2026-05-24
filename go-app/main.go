@@ -1296,6 +1296,32 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		}
 	}
 
+	if err := storage.HeartbeatFetchJobLock(systemDB, jobID, storage.FetchJobLockTTL); err != nil {
+		failJob("任务锁不可用", "任务锁不可用")
+		return
+	}
+	stopHeartbeat := make(chan struct{})
+	var stopHeartbeatOnce sync.Once
+	defer stopHeartbeatOnce.Do(func() { close(stopHeartbeat) })
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := storage.HeartbeatFetchJobLock(systemDB, jobID, storage.FetchJobLockTTL); err != nil {
+					jobEvents.publish(jobID, gin.H{
+						"type":    "log",
+						"message": "任务锁续期失败：" + err.Error(),
+					})
+					return
+				}
+			case <-stopHeartbeat:
+				return
+			}
+		}
+	}()
+
 	mysqlCfg, err := storage.GetMySQLConfig(systemDB, fieldKey, true)
 	if err != nil || mysqlCfg.Host == "" {
 		failJob("MySQL 配置不可用", "MySQL 配置不可用")
