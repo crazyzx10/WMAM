@@ -5,3 +5,11 @@ node_modules/
 # Go 编译产物
 go-app/*.exe
 go-app/frontend_original.html
+go-app/data/
+go-app/.gocache/
+go-app/.gopath/
+go-app/.gomodcache/
+go-app/web/.npm-cache/
+go-app/web/node_modules/
+go-app/web/dist/
+go-app/web/tsconfig.tsbuildinfo

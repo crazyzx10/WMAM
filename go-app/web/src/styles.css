@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: 250 250 250;
+  --foreground: 17 17 17;
+  --card: 255 255 255;
+  --card-foreground: 17 17 17;
+  --sidebar: 250 250 250;
+  --muted: 238 238 238;
+  --muted-foreground: 102 102 102;
+  --border: 229 229 229;
+  --ring: 17 17 17;
+  --success: 34 197 94;
+  --warning: 245 158 11;
+  --danger: 239 68 68;
+  --log: 250 250 250;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 10 10 10;
+  --foreground: 250 250 250;
+  --card: 17 17 17;
+  --card-foreground: 250 250 250;
+  --sidebar: 17 17 17;
+  --muted: 31 31 31;
+  --muted-foreground: 161 161 170;
+  --border: 39 39 42;
+  --ring: 250 250 250;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  --log: 15 15 15;
+}
+
+@theme inline {
+  --color-background: rgb(var(--background));
+  --color-foreground: rgb(var(--foreground));
+  --color-card: rgb(var(--card));
+  --color-card-foreground: rgb(var(--card-foreground));
+  --color-sidebar: rgb(var(--sidebar));
+  --color-muted: rgb(var(--muted));
+  --color-muted-foreground: rgb(var(--muted-foreground));
+  --color-border: rgb(var(--border));
+  --color-ring: rgb(var(--ring));
+  --color-success: rgb(var(--success));
+  --color-warning: rgb(var(--warning));
+  --color-danger: rgb(var(--danger));
+  --color-log: rgb(var(--log));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+.field {
+  height: 40px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--border));
+  background: rgb(var(--background));
+  padding: 0 12px;
+  color: rgb(var(--foreground));
+  outline: none;
+}
+
+.field:focus {
+  box-shadow: 0 0 0 2px rgb(var(--ring) / 0.18);
+}

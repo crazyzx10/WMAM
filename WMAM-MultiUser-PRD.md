@@ -796,7 +796,7 @@ CREATE TABLE fetch_progress (
 
 ### 8.3 环境要求
 
-- Go 1.24+
+- Go 1.26.3+
 - MySQL 5.7+
 - Redis（可选，用于 Token 存储和锁）
 
