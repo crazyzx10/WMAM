@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -18,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"go-app/internal/appconfig"
+	"go-app/internal/storage"
 	"go-app/middleware"
 	"go-app/models"
 	"go-app/utils"
@@ -30,9 +34,9 @@ import (
 var frontendFS embed.FS
 
 type Config struct {
-	Database      DatabaseConfig      `json:"database"`
-	Settings      SettingsConfig      `json:"settings"`
-	MiniPrograms  []MiniProgramConfig `json:"miniPrograms"`
+	Database     DatabaseConfig      `json:"database"`
+	Settings     SettingsConfig      `json:"settings"`
+	MiniPrograms []MiniProgramConfig `json:"miniPrograms"`
 }
 
 type DatabaseConfig struct {
@@ -49,17 +53,18 @@ type SettingsConfig struct {
 }
 
 type MiniProgramConfig struct {
-	Name     string `json:"name"`
-	AppID    string `json:"appid"`
+	Name      string `json:"name"`
+	AppID     string `json:"appid"`
 	AppSecret string `json:"appsecret"`
 }
 
 var (
-	configPath   string
-	mu           sync.Mutex
-	httpClient   = &http.Client{Timeout: 30 * time.Second}
-	tokenCaches  = sync.Map{}
-	db           *sql.DB
+	configPath  string
+	mu          sync.Mutex
+	httpClient  = &http.Client{Timeout: 30 * time.Second}
+	tokenCaches = sync.Map{}
+	db          *sql.DB
+	systemDB    *sql.DB
 )
 
 func init() {
@@ -153,8 +158,8 @@ func loadConfig() (Config, error) {
 		}
 
 		miniPrograms = append(miniPrograms, MiniProgramConfig{
-			Name:     name,
-			AppID:    appid,
+			Name:      name,
+			AppID:     appid,
 			AppSecret: secret,
 		})
 	}
@@ -411,10 +416,258 @@ func initDefaultAdmin() error {
 	return nil
 }
 
-func loginHandler(c *gin.Context) {
+func hashAuthToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func bearerToken(c *gin.Context) string {
+	authHeader := c.GetHeader("Authorization")
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return ""
+	}
+	return parts[1]
+}
+
+func localLoginHandler(c *gin.Context) {
+	var req struct {
+		Username         string `json:"username" binding:"required"`
+		Password         string `json:"password" binding:"required"`
+		RememberPassword bool   `json:"rememberPassword"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	user, err := storage.GetUserByUsername(systemDB, req.Username)
+	if err != nil {
+		utils.Error(c, 401, "用户名或密码错误")
+		return
+	}
+
+	if user.Status == "disabled" {
+		utils.Error(c, 403, "账号已被禁用")
+		return
+	}
+
+	if !utils.CheckPassword(req.Password, user.PasswordHash) {
+		utils.Error(c, 401, "用户名或密码错误")
+		_ = storage.CreateAuditLog(systemDB, &user.ID, user.Username, "LOGIN_FAILED", "user", fmt.Sprintf("%d", user.ID), "登录失败：密码错误", "failed", c.ClientIP(), c.GetHeader("User-Agent"))
+		return
+	}
+
+	tokenDuration := 24 * time.Hour
+	if req.RememberPassword {
+		tokenDuration = 30 * 24 * time.Hour
+	}
+
+	token, err := utils.GenerateTokenWithDuration(user.ID, user.Username, user.Role, tokenDuration)
+	if err != nil {
+		utils.Error(c, 500, "生成登录凭证失败")
+		return
+	}
+
+	expiresAt := time.Now().Add(tokenDuration)
+	_ = storage.CreateSession(systemDB, user.ID, hashAuthToken(token), req.RememberPassword, expiresAt, c.ClientIP(), c.GetHeader("User-Agent"))
+	_ = storage.UpdateLastLogin(systemDB, user.ID)
+	_ = storage.CreateAuditLog(systemDB, &user.ID, user.Username, "LOGIN", "user", fmt.Sprintf("%d", user.ID), "登录成功", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{
+		"token":      token,
+		"expires_at": expiresAt.Format(time.RFC3339),
+		"user": gin.H{
+			"id":                   user.ID,
+			"username":             user.Username,
+			"role":                 user.Role,
+			"must_change_password": user.MustChangePassword,
+		},
+	})
+}
+
+func localCurrentUserHandler(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	id, ok := userID.(int64)
+	if !ok {
+		utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "登录状态无效")
+		return
+	}
+
+	user, err := storage.GetUserByID(systemDB, id)
+	if err != nil || user.Status != "active" {
+		utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "登录状态无效")
+		return
+	}
+
+	utils.Success(c, gin.H{
+		"user": gin.H{
+			"id":                   user.ID,
+			"username":             user.Username,
+			"role":                 user.Role,
+			"must_change_password": user.MustChangePassword,
+		},
+	})
+}
+
+func localLogoutHandler(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	id, _ := userID.(int64)
+	name, _ := username.(string)
+
+	if token := bearerToken(c); token != "" {
+		_ = storage.RevokeSession(systemDB, hashAuthToken(token))
+	}
+	_ = storage.CreateAuditLog(systemDB, &id, name, "LOGOUT", "user", fmt.Sprintf("%d", id), "退出登录", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
+}
+
+func localGetUsersHandler(c *gin.Context) {
+	users, err := storage.ListUsers(systemDB)
+	if err != nil {
+		utils.Error(c, 500, "获取用户列表失败")
+		return
+	}
+	utils.Success(c, gin.H{"users": users})
+}
+
+func localCreateUserHandler(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
+		Role     string `json:"role" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	passwordHash, err := utils.HashPassword(req.Password)
+	if err != nil {
+		utils.Error(c, 500, "密码加密失败")
+		return
+	}
+
+	user, err := storage.CreateUser(systemDB, req.Username, passwordHash, req.Role)
+	if err != nil {
+		utils.Error(c, 500, "创建用户失败："+err.Error())
+		return
+	}
+
+	adminID, _ := c.Get("user_id")
+	adminName, _ := c.Get("username")
+	id, _ := adminID.(int64)
+	name, _ := adminName.(string)
+	_ = storage.CreateAuditLog(systemDB, &id, name, "USER_CREATE", "user", fmt.Sprintf("%d", user.ID), "创建用户："+user.Username, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"user": user})
+}
+
+func localUpdateUserHandler(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的用户 ID")
+		return
+	}
+
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Status   string `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	user, err := storage.UpdateUser(systemDB, id, req.Username, req.Status)
+	if err != nil {
+		utils.Error(c, 500, "更新用户失败："+err.Error())
+		return
+	}
+
+	adminID, _ := c.Get("user_id")
+	adminName, _ := c.Get("username")
+	operatorID, _ := adminID.(int64)
+	operatorName, _ := adminName.(string)
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "USER_UPDATE", "user", fmt.Sprintf("%d", user.ID), "更新用户："+user.Username, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"user": user})
+}
+
+func localDeleteUserHandler(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的用户 ID")
+		return
+	}
+
+	user, err := storage.GetUserByID(systemDB, id)
+	if err != nil {
+		utils.Error(c, 404, "用户不存在")
+		return
+	}
+
+	if err := storage.DeleteUser(systemDB, id); err != nil {
+		utils.Error(c, 500, "删除用户失败："+err.Error())
+		return
+	}
+
+	adminID, _ := c.Get("user_id")
+	adminName, _ := c.Get("username")
+	operatorID, _ := adminID.(int64)
+	operatorName, _ := adminName.(string)
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "USER_DELETE", "user", fmt.Sprintf("%d", user.ID), "删除用户："+user.Username, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
+}
+
+func localDashboardStatsHandler(c *gin.Context) {
+	userCount, _ := storage.CountUsers(systemDB)
+	miniProgramCount, _ := storage.CountMiniPrograms(systemDB)
+	todayFetchCount, _ := storage.CountTodayFetchJobs(systemDB)
+	lastFetchTime, _ := storage.LastFetchTime(systemDB)
+
+	utils.Success(c, gin.H{
+		"user_count":         userCount,
+		"mini_program_count": miniProgramCount,
+		"today_fetch_count":  todayFetchCount,
+		"last_fetch_time":    lastFetchTime,
+	})
+}
+
+func localGetLogsHandler(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	role, _ := c.Get("role")
+	id, _ := userID.(int64)
+	isAdmin := role == "admin"
+
+	page := 1
+	if pageStr := c.Query("page"); pageStr != "" {
+		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	limit := 20
+	offset := (page - 1) * limit
+
+	logs, total, err := storage.ListAuditLogs(systemDB, id, isAdmin, offset, limit)
+	if err != nil {
+		utils.Error(c, 500, "获取日志失败")
+		return
+	}
+
+	utils.Success(c, gin.H{"logs": logs, "total": total})
+}
+
+func loginHandler(c *gin.Context) {
+	var req struct {
+		Username         string `json:"username" binding:"required"`
+		Password         string `json:"password" binding:"required"`
+		RememberPassword bool   `json:"rememberPassword"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -575,7 +828,7 @@ func deleteUserHandler(c *gin.Context) {
 
 func getDashboardStatsHandler(c *gin.Context) {
 	userCount, _ := models.GetUserCount(db)
-	
+
 	miniProgramCount := int64(0)
 	_ = db.QueryRow("SELECT COUNT(*) FROM mini_program").Scan(&miniProgramCount)
 
@@ -588,10 +841,10 @@ func getDashboardStatsHandler(c *gin.Context) {
 	}
 
 	utils.Success(c, gin.H{
-		"user_count":        userCount,
+		"user_count":         userCount,
 		"mini_program_count": miniProgramCount,
-		"today_fetch_count": todayFetchCount,
-		"last_fetch_time":   lastFetchStr,
+		"today_fetch_count":  todayFetchCount,
+		"last_fetch_time":    lastFetchStr,
 	})
 }
 
@@ -1034,16 +1287,16 @@ func getToken(appID, secret string) (string, error) {
 }
 
 var allowedTables = map[string]bool{
-	"publisher_adpos_general":   true,
-	"publisher_adunit_general":  true,
-	"publisher_settlement":      true,
-	"adunit_list":               true,
-	"mini_program":              true,
-	"fetch_log":                 true,
+	"publisher_adpos_general":  true,
+	"publisher_adunit_general": true,
+	"publisher_settlement":     true,
+	"adunit_list":              true,
+	"mini_program":             true,
+	"fetch_log":                true,
 }
 
 var allowedColumns = map[string]bool{
-	"日期":         true,
+	"日期":       true,
 	"data拉取日期": true,
 }
 
@@ -1796,14 +2049,27 @@ func startTokenCleanupJob() {
 }
 
 func main() {
-	var err error
-	cfg, _ := loadConfig()
-	if cfg.Database.Host != "" {
-		db, err = getDBConnection(cfg)
-		if err == nil {
-			_ = initDatabase(db)
-			_ = initDefaultAdmin()
-		}
+	appCfg, err := appconfig.Load("config.yaml")
+	if err != nil {
+		log.Fatalf("读取配置失败: %v", err)
+	}
+
+	systemDB, err = storage.OpenSystemDB(appCfg.Data.Dir)
+	if err != nil {
+		log.Fatalf("初始化本地系统存储失败: %v", err)
+	}
+	defer systemDB.Close()
+
+	defaultAdminHash, err := utils.HashPassword("admin123")
+	if err != nil {
+		log.Fatalf("初始化默认管理员失败: %v", err)
+	}
+	adminCreated, err := storage.EnsureDefaultAdmin(systemDB, defaultAdminHash)
+	if err != nil {
+		log.Fatalf("初始化默认管理员失败: %v", err)
+	}
+	if adminCreated {
+		log.Println("默认管理员账号已创建: admin / admin123")
 	}
 
 	startTokenCleanupJob()
@@ -1817,18 +2083,18 @@ func main() {
 
 	auth := r.Group("/api")
 	{
-		auth.POST("/auth/login", loginHandler)
-		auth.POST("/auth/logout", middleware.AuthMiddleware(), logoutHandler)
-		auth.GET("/auth/me", middleware.AuthMiddleware(), getCurrentUserHandler)
+		auth.POST("/auth/login", localLoginHandler)
+		auth.POST("/auth/logout", middleware.AuthMiddleware(), localLogoutHandler)
+		auth.GET("/auth/me", middleware.AuthMiddleware(), localCurrentUserHandler)
 	}
 
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	{
-		api.GET("/dashboard/stats", getDashboardStatsHandler)
+		api.GET("/dashboard/stats", localDashboardStatsHandler)
 		api.GET("/mini-programs", getMiniProgramsHandler)
 		api.POST("/fetch/execute", executeFetchHandler)
-		api.GET("/logs", getLogsHandler)
+		api.GET("/logs", localGetLogsHandler)
 		api.GET("/config", getConfigHandler)
 		api.POST("/config", saveConfigHandler)
 		api.POST("/test-connection", testConnectionHandler)
@@ -1837,15 +2103,23 @@ func main() {
 	admin := r.Group("/api")
 	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
 	{
-		admin.GET("/users", getUsersHandler)
-		admin.POST("/users", createUserHandler)
-		admin.PUT("/users/:id", updateUserHandler)
-		admin.DELETE("/users/:id", deleteUserHandler)
+		admin.GET("/users", localGetUsersHandler)
+		admin.POST("/users", localCreateUserHandler)
+		admin.PUT("/users/:id", localUpdateUserHandler)
+		admin.DELETE("/users/:id", localDeleteUserHandler)
 	}
 
-	port := 28384
-	addr := fmt.Sprintf(":%d", port)
-	webUrl := fmt.Sprintf("http://localhost:%d/", port)
+	port := appCfg.Server.Port
+	host := strings.TrimSpace(appCfg.Server.Host)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	addr := fmt.Sprintf("%s:%d", host, port)
+	browserHost := host
+	if browserHost == "0.0.0.0" {
+		browserHost = "localhost"
+	}
+	webUrl := fmt.Sprintf("http://%s:%d/", browserHost, port)
 
 	go func() {
 		time.Sleep(500 * time.Millisecond)

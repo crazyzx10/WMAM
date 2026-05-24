@@ -1,14 +1,51 @@
-import { Moon, Sun } from "lucide-react";
+import { type FormEvent, useState } from "react";
+import { Lock, Moon, Sun, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { apiRequest } from "../lib/api";
+import { type CurrentUser, setAuth } from "../lib/auth";
+
+type LoginResult = {
+  token: string;
+  expires_at: string;
+  user: CurrentUser;
+};
 
 export function LoginPage() {
+  const navigate = useNavigate();
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [rememberPassword, setRememberPassword] = useState(true);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const data = await apiRequest<LoginResult>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password, rememberPassword })
+      });
+      setAuth(data.token, data.user, rememberPassword);
+      navigate("/app/fetch", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "登录失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
       <Button className="absolute right-6 top-6" variant="ghost" size="icon" aria-label="切换主题">
         <Sun className="h-4 w-4 dark:hidden" />
         <Moon className="hidden h-4 w-4 dark:block" />
       </Button>
+
       <Card className="w-full max-w-[420px] p-8">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-foreground font-semibold text-background">
@@ -17,20 +54,54 @@ export function LoginPage() {
           <h1 className="text-2xl font-semibold tracking-tight">WMAM</h1>
           <p className="mt-2 text-sm text-muted-foreground">微信小程序广告数据管理</p>
         </div>
-        <form className="space-y-4">
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block space-y-2">
             <span className="text-sm text-muted-foreground">用户名</span>
-            <input className="field" placeholder="请输入用户名" />
+            <div className="relative">
+              <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                className="field pl-9"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+              />
+            </div>
           </label>
+
           <label className="block space-y-2">
             <span className="text-sm text-muted-foreground">密码</span>
-            <input className="field" type="password" placeholder="请输入密码" />
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                className="field pl-9"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
           </label>
+
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input type="checkbox" className="h-4 w-4 rounded border-border" />
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border"
+              checked={rememberPassword}
+              onChange={(event) => setRememberPassword(event.target.checked)}
+            />
             记住密码
           </label>
-          <Button className="w-full">登录</Button>
+
+          {error ? (
+            <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              {error}
+            </div>
+          ) : null}
+
+          <Button className="w-full" disabled={loading || !username || !password}>
+            {loading ? "登录中" : "登录"}
+          </Button>
         </form>
       </Card>
     </div>

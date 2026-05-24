@@ -1,13 +1,16 @@
 import {
   Database,
   FileClock,
+  LogOut,
   Moon,
   Play,
   Smartphone,
   Sun,
   Users
 } from "lucide-react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { apiRequest } from "../lib/api";
+import { clearAuth, getStoredToken, getStoredUser } from "../lib/auth";
 import { Button } from "../components/ui/Button";
 import { FetchPage } from "../pages/FetchPage";
 import { LogsPage } from "../pages/LogsPage";
@@ -16,15 +19,36 @@ import { ProgramsPage } from "../pages/ProgramsPage";
 import { SystemPage } from "../pages/SystemPage";
 import { UsersPage } from "../pages/UsersPage";
 
-const adminNav = [
-  { to: "/app/programs", label: "小程序配置", icon: Smartphone },
-  { to: "/app/system", label: "系统配置", icon: Database },
+const navItems = [
+  { to: "/app/programs", label: "小程序配置", icon: Smartphone, adminOnly: true },
+  { to: "/app/system", label: "系统配置", icon: Database, adminOnly: true },
   { to: "/app/fetch", label: "执行拉取", icon: Play },
   { to: "/app/logs", label: "操作日志", icon: FileClock },
-  { to: "/app/users", label: "用户管理", icon: Users }
+  { to: "/app/users", label: "用户管理", icon: Users, adminOnly: true }
 ];
 
+function ProtectedRoute() {
+  const token = getStoredToken();
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <AppLayout />;
+}
+
 function AppLayout() {
+  const navigate = useNavigate();
+  const user = getStoredUser();
+  const visibleNav = navItems.filter((item) => !item.adminOnly || user?.role === "admin");
+
+  async function handleLogout() {
+    try {
+      await apiRequest("/api/auth/logout", { method: "POST" });
+    } finally {
+      clearAuth();
+      navigate("/login", { replace: true });
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-20 flex w-64 flex-col border-r border-border bg-sidebar">
@@ -32,10 +56,13 @@ function AppLayout() {
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-sm font-semibold text-background">
             W
           </div>
-          <div className="font-semibold tracking-tight">WMAM</div>
+          <div>
+            <div className="font-semibold tracking-tight">WMAM</div>
+            <div className="text-xs text-muted-foreground">{user?.username ?? "未登录"}</div>
+          </div>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {adminNav.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -60,14 +87,17 @@ function AppLayout() {
           <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-6">
             <div>
               <div className="text-sm text-muted-foreground">微信小程序广告数据管理</div>
-              <h1 className="text-lg font-semibold">多用户控制台</h1>
+              <h1 className="text-lg font-semibold">多人控制台</h1>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" aria-label="切换主题">
                 <Sun className="h-4 w-4 dark:hidden" />
                 <Moon className="hidden h-4 w-4 dark:block" />
               </Button>
-              <Button variant="outline">退出登录</Button>
+              <Button variant="outline" onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                退出登录
+              </Button>
             </div>
           </div>
         </header>
@@ -91,7 +121,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/app/*" element={<AppLayout />} />
+      <Route path="/app/*" element={<ProtectedRoute />} />
       <Route path="*" element={<Navigate to="/app/fetch" replace />} />
     </Routes>
   );

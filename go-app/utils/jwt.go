@@ -19,8 +19,12 @@ type Claims struct {
 
 // GenerateToken 生成JWT Token
 func GenerateToken(userID int64, username, role string) (string, error) {
+	return GenerateTokenWithDuration(userID, username, role, 24*time.Hour)
+}
+
+func GenerateTokenWithDuration(userID int64, username, role string, duration time.Duration) (string, error) {
 	nowTime := time.Now()
-	expireTime := nowTime.Add(24 * time.Hour)
+	expireTime := nowTime.Add(duration)
 
 	claims := Claims{
 		UserID:   userID,
