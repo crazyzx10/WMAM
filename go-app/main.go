@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -1749,6 +1750,15 @@ func localJobEventsHandler(c *gin.Context) {
 	}
 }
 
+func serveFrontendIndex(c *gin.Context) {
+	indexHTML, err := frontendFS.ReadFile("frontend/index.html")
+	if err != nil {
+		c.String(http.StatusInternalServerError, "加载前端页面失败")
+		return
+	}
+	c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+}
+
 func loginHandler(c *gin.Context) {
 	var req struct {
 		Username         string `json:"username" binding:"required"`
@@ -3183,11 +3193,6 @@ func main() {
 
 	r := gin.Default()
 
-	r.StaticFS("/", http.FS(frontendFS))
-	r.NoRoute(func(c *gin.Context) {
-		c.FileFromFS("frontend/index.html", http.FS(frontendFS))
-	})
-
 	auth := r.Group("/api")
 	{
 		auth.POST("/auth/login", localLoginHandler)
@@ -3238,6 +3243,20 @@ func main() {
 		admin.POST("/programs/:id/status", localSetProgramStatusHandler)
 		admin.DELETE("/programs/:id", localDeleteProgramHandler)
 	}
+
+	assetsFS, err := fs.Sub(frontendFS, "frontend/assets")
+	if err != nil {
+		log.Fatalf("加载前端资源失败: %v", err)
+	}
+	r.StaticFS("/assets", http.FS(assetsFS))
+	r.GET("/", serveFrontendIndex)
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			utils.Error(c, http.StatusNotFound, "接口不存在")
+			return
+		}
+		serveFrontendIndex(c)
+	})
 
 	port := appCfg.Server.Port
 	host := strings.TrimSpace(appCfg.Server.Host)
