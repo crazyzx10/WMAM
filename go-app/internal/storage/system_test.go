@@ -39,6 +39,13 @@ func TestSystemStorageFoundation(t *testing.T) {
 	if _, err := CreateUser(db, "alice", "hashed-password", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
+	alice, err := GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(alice) error = %v", err)
+	}
+	if !alice.MustChangePassword {
+		t.Fatal("expected new ordinary user to require password change")
+	}
 	if _, err := CreateUser(db, "second-admin", "hashed-password", "admin"); err == nil {
 		t.Fatal("expected creating a second admin to fail")
 	}
@@ -48,6 +55,24 @@ func TestSystemStorageFoundation(t *testing.T) {
 	}
 	if err := RevokeSession(db, "token-hash"); err != nil {
 		t.Fatalf("RevokeSession() error = %v", err)
+	}
+	active, err := ValidateSession(db, "token-hash")
+	if err != nil {
+		t.Fatalf("ValidateSession() error = %v", err)
+	}
+	if active {
+		t.Fatal("expected revoked session to be inactive")
+	}
+
+	if err := UpdateUserPassword(db, alice.ID, "new-hash", false); err != nil {
+		t.Fatalf("UpdateUserPassword() error = %v", err)
+	}
+	alice, err = GetUserByID(db, alice.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID(alice) error = %v", err)
+	}
+	if alice.MustChangePassword {
+		t.Fatal("expected password change requirement to be cleared")
 	}
 
 	if err := CreateAuditLog(db, &admin.ID, admin.Username, "LOGIN", "user", "1", "登录成功", "success", "127.0.0.1", "test"); err != nil {

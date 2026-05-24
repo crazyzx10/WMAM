@@ -31,7 +31,7 @@ export function LoginPage() {
         body: JSON.stringify({ username, password, rememberPassword })
       });
       setAuth(data.token, data.user, rememberPassword);
-      navigate("/app/fetch", { replace: true });
+      navigate(data.user.must_change_password ? "/change-password" : "/app/fetch", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");
     } finally {

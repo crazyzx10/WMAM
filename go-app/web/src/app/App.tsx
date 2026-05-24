@@ -8,10 +8,11 @@ import {
   Sun,
   Users
 } from "lucide-react";
-import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { apiRequest } from "../lib/api";
 import { clearAuth, getStoredToken, getStoredUser } from "../lib/auth";
 import { Button } from "../components/ui/Button";
+import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { FetchPage } from "../pages/FetchPage";
 import { LogsPage } from "../pages/LogsPage";
 import { LoginPage } from "../pages/LoginPage";
@@ -28,11 +29,24 @@ const navItems = [
 ];
 
 function ProtectedRoute() {
+  const location = useLocation();
+  const token = getStoredToken();
+  const user = getStoredUser();
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  if (user?.must_change_password && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
+  return <AppLayout />;
+}
+
+function ProtectedChangePasswordRoute() {
   const token = getStoredToken();
   if (!token) {
     return <Navigate to="/login" replace />;
   }
-  return <AppLayout />;
+  return <ChangePasswordPage />;
 }
 
 function AppLayout() {
@@ -121,6 +135,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/change-password" element={<ProtectedChangePasswordRoute />} />
       <Route path="/app/*" element={<ProtectedRoute />} />
       <Route path="*" element={<Navigate to="/app/fetch" replace />} />
     </Routes>

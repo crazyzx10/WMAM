@@ -185,8 +185,8 @@ func CreateUser(db *sql.DB, username, passwordHash, role string) (*SystemUser, e
 	}
 
 	result, err := db.Exec(`
-INSERT INTO users (username, password_hash, role, status, password_changed_at)
-VALUES (?, ?, ?, 'active', CURRENT_TIMESTAMP)
+INSERT INTO users (username, password_hash, role, status, must_change_password, password_changed_at)
+VALUES (?, ?, ?, 'active', 1, CURRENT_TIMESTAMP)
 `, strings.TrimSpace(username), passwordHash, role)
 	if err != nil {
 		return nil, err
@@ -224,6 +224,22 @@ WHERE id = ?
 	return GetUserByID(db, id)
 }
 
+func UpdateUserPassword(db *sql.DB, id int64, passwordHash string, mustChangePassword bool) error {
+	mustChange := 0
+	if mustChangePassword {
+		mustChange = 1
+	}
+	_, err := db.Exec(`
+UPDATE users
+SET password_hash = ?,
+    must_change_password = ?,
+    password_changed_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`, passwordHash, mustChange, id)
+	return err
+}
+
 func DeleteUser(db *sql.DB, id int64) error {
 	user, err := GetUserByID(db, id)
 	if err != nil {
@@ -232,8 +248,19 @@ func DeleteUser(db *sql.DB, id int64) error {
 	if user.Role == "admin" {
 		return errors.New("admin cannot be deleted")
 	}
-	_, err = db.Exec("DELETE FROM users WHERE id = ?", id)
-	return err
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM users WHERE id = ?", id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func UpdateLastLogin(db *sql.DB, id int64) error {
@@ -245,6 +272,32 @@ WHERE id = ?
 	return err
 }
 
+func ValidateSession(db *sql.DB, tokenHash string) (bool, error) {
+	var expiresAtRaw string
+	err := db.QueryRow(`
+SELECT expires_at
+FROM sessions
+WHERE token_hash = ? AND revoked_at IS NULL
+`, tokenHash).Scan(&expiresAtRaw)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	expiresAt, err := time.Parse(time.RFC3339, expiresAtRaw)
+	if err != nil {
+		return false, err
+	}
+	if time.Now().After(expiresAt) {
+		return false, nil
+	}
+
+	_, _ = db.Exec("UPDATE sessions SET last_used_at = CURRENT_TIMESTAMP WHERE token_hash = ?", tokenHash)
+	return true, nil
+}
+
 func CreateSession(db *sql.DB, userID int64, tokenHash string, remember bool, expiresAt time.Time, ipAddress, userAgent string) error {
 	rememberValue := 0
 	if remember {
@@ -254,6 +307,15 @@ func CreateSession(db *sql.DB, userID int64, tokenHash string, remember bool, ex
 INSERT INTO sessions (user_id, token_hash, remember, expires_at, ip_address, user_agent)
 VALUES (?, ?, ?, ?, ?, ?)
 `, userID, tokenHash, rememberValue, expiresAt.Format(time.RFC3339), ipAddress, userAgent)
+	return err
+}
+
+func RevokeUserSessions(db *sql.DB, userID int64) error {
+	_, err := db.Exec(`
+UPDATE sessions
+SET revoked_at = CURRENT_TIMESTAMP
+WHERE user_id = ? AND revoked_at IS NULL
+`, userID)
 	return err
 }
 

@@ -430,6 +430,44 @@ func bearerToken(c *gin.Context) string {
 	return parts[1]
 }
 
+func localAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := bearerToken(c)
+		if token == "" {
+			utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "请先登录")
+			c.Abort()
+			return
+		}
+
+		claims, err := utils.ParseToken(token)
+		if err != nil {
+			utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "登录状态已失效")
+			c.Abort()
+			return
+		}
+
+		sessionActive, err := storage.ValidateSession(systemDB, hashAuthToken(token))
+		if err != nil || !sessionActive {
+			utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "登录状态已失效")
+			c.Abort()
+			return
+		}
+
+		user, err := storage.GetUserByID(systemDB, claims.UserID)
+		if err != nil || user.Status != "active" {
+			utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "账号不可用")
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", user.ID)
+		c.Set("username", user.Username)
+		c.Set("role", user.Role)
+		c.Set("must_change_password", user.MustChangePassword)
+		c.Next()
+	}
+}
+
 func localLoginHandler(c *gin.Context) {
 	var req struct {
 		Username         string `json:"username" binding:"required"`
@@ -525,6 +563,47 @@ func localLogoutHandler(c *gin.Context) {
 	utils.Success(c, nil)
 }
 
+func localChangePasswordHandler(c *gin.Context) {
+	var req struct {
+		OldPassword string `json:"oldPassword" binding:"required"`
+		NewPassword string `json:"newPassword" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		utils.Error(c, 400, "新密码至少需要 8 位")
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	id, _ := userID.(int64)
+	user, err := storage.GetUserByID(systemDB, id)
+	if err != nil {
+		utils.Error(c, 404, "用户不存在")
+		return
+	}
+	if !utils.CheckPassword(req.OldPassword, user.PasswordHash) {
+		utils.Error(c, 400, "旧密码错误")
+		return
+	}
+
+	hash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		utils.Error(c, 500, "密码加密失败")
+		return
+	}
+	if err := storage.UpdateUserPassword(systemDB, user.ID, hash, false); err != nil {
+		utils.Error(c, 500, "修改密码失败")
+		return
+	}
+	_ = storage.RevokeUserSessions(systemDB, user.ID)
+	_ = storage.CreateAuditLog(systemDB, &user.ID, user.Username, "PASSWORD_CHANGE", "user", fmt.Sprintf("%d", user.ID), "修改自己的密码", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
+}
+
 func localGetUsersHandler(c *gin.Context) {
 	users, err := storage.ListUsers(systemDB)
 	if err != nil {
@@ -534,11 +613,59 @@ func localGetUsersHandler(c *gin.Context) {
 	utils.Success(c, gin.H{"users": users})
 }
 
+func localResetUserPasswordHandler(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的用户 ID")
+		return
+	}
+
+	var req struct {
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+	if len(req.Password) < 8 {
+		utils.Error(c, 400, "新密码至少需要 8 位")
+		return
+	}
+
+	user, err := storage.GetUserByID(systemDB, id)
+	if err != nil {
+		utils.Error(c, 404, "用户不存在")
+		return
+	}
+	if user.Role == "admin" {
+		utils.Error(c, 403, "不能在用户管理中重置管理员密码")
+		return
+	}
+
+	hash, err := utils.HashPassword(req.Password)
+	if err != nil {
+		utils.Error(c, 500, "密码加密失败")
+		return
+	}
+	if err := storage.UpdateUserPassword(systemDB, user.ID, hash, true); err != nil {
+		utils.Error(c, 500, "重置密码失败")
+		return
+	}
+	_ = storage.RevokeUserSessions(systemDB, user.ID)
+
+	adminID, _ := c.Get("user_id")
+	adminName, _ := c.Get("username")
+	operatorID, _ := adminID.(int64)
+	operatorName, _ := adminName.(string)
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "USER_PASSWORD_RESET", "user", fmt.Sprintf("%d", user.ID), "重置用户密码："+user.Username, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
+}
+
 func localCreateUserHandler(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
-		Role     string `json:"role" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -552,7 +679,7 @@ func localCreateUserHandler(c *gin.Context) {
 		return
 	}
 
-	user, err := storage.CreateUser(systemDB, req.Username, passwordHash, req.Role)
+	user, err := storage.CreateUser(systemDB, req.Username, passwordHash, "user")
 	if err != nil {
 		utils.Error(c, 500, "创建用户失败："+err.Error())
 		return
@@ -588,12 +715,19 @@ func localUpdateUserHandler(c *gin.Context) {
 		utils.Error(c, 500, "更新用户失败："+err.Error())
 		return
 	}
+	if user.Status == "disabled" {
+		_ = storage.RevokeUserSessions(systemDB, user.ID)
+	}
 
 	adminID, _ := c.Get("user_id")
 	adminName, _ := c.Get("username")
 	operatorID, _ := adminID.(int64)
 	operatorName, _ := adminName.(string)
-	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "USER_UPDATE", "user", fmt.Sprintf("%d", user.ID), "更新用户："+user.Username, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	action := "USER_ENABLE"
+	if user.Status == "disabled" {
+		action = "USER_DISABLE"
+	}
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, action, "user", fmt.Sprintf("%d", user.ID), "更新用户："+user.Username, "success", c.ClientIP(), c.GetHeader("User-Agent"))
 
 	utils.Success(c, gin.H{"user": user})
 }
@@ -2084,12 +2218,13 @@ func main() {
 	auth := r.Group("/api")
 	{
 		auth.POST("/auth/login", localLoginHandler)
-		auth.POST("/auth/logout", middleware.AuthMiddleware(), localLogoutHandler)
-		auth.GET("/auth/me", middleware.AuthMiddleware(), localCurrentUserHandler)
+		auth.POST("/auth/logout", localAuthMiddleware(), localLogoutHandler)
+		auth.GET("/auth/me", localAuthMiddleware(), localCurrentUserHandler)
+		auth.POST("/auth/change-password", localAuthMiddleware(), localChangePasswordHandler)
 	}
 
 	api := r.Group("/api")
-	api.Use(middleware.AuthMiddleware())
+	api.Use(localAuthMiddleware())
 	{
 		api.GET("/dashboard/stats", localDashboardStatsHandler)
 		api.GET("/mini-programs", getMiniProgramsHandler)
@@ -2101,11 +2236,12 @@ func main() {
 	}
 
 	admin := r.Group("/api")
-	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
+	admin.Use(localAuthMiddleware(), middleware.AdminMiddleware())
 	{
 		admin.GET("/users", localGetUsersHandler)
 		admin.POST("/users", localCreateUserHandler)
 		admin.PUT("/users/:id", localUpdateUserHandler)
+		admin.POST("/users/:id/reset-password", localResetUserPasswordHandler)
 		admin.DELETE("/users/:id", localDeleteUserHandler)
 	}
 
