@@ -70,7 +70,69 @@ var (
 	systemDB    *sql.DB
 	fieldKey    []byte
 	appDataDir  string
+	jobEvents   = newJobEventBroker()
 )
+
+type jobEventBroker struct {
+	mu          sync.Mutex
+	subscribers map[int64]map[chan string]struct{}
+}
+
+func newJobEventBroker() *jobEventBroker {
+	return &jobEventBroker{subscribers: make(map[int64]map[chan string]struct{})}
+}
+
+func (b *jobEventBroker) subscribe(jobID int64) chan string {
+	ch := make(chan string, 100)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.subscribers[jobID] == nil {
+		b.subscribers[jobID] = make(map[chan string]struct{})
+	}
+	b.subscribers[jobID][ch] = struct{}{}
+	return ch
+}
+
+func (b *jobEventBroker) unsubscribe(jobID int64, ch chan string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if subscribers := b.subscribers[jobID]; subscribers != nil {
+		delete(subscribers, ch)
+		if len(subscribers) == 0 {
+			delete(b.subscribers, jobID)
+		}
+	}
+	close(ch)
+}
+
+func (b *jobEventBroker) publish(jobID int64, event gin.H) {
+	if _, ok := event["time"]; !ok {
+		event["time"] = time.Now().Format("15:04:05")
+	}
+	raw, _ := json.Marshal(event)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for ch := range b.subscribers[jobID] {
+		select {
+		case ch <- string(raw):
+		default:
+		}
+	}
+}
+
+func publishJobStateEvent(jobID int64) {
+	job, err := storage.GetFetchJobByID(systemDB, jobID)
+	if err != nil || job == nil {
+		return
+	}
+	jobEvents.publish(jobID, gin.H{
+		"type":            "job",
+		"status":          job.Status,
+		"progressPercent": job.ProgressPercent,
+		"currentProgram":  job.CurrentProgramName,
+		"currentStep":     job.CurrentStep,
+	})
+}
 
 func init() {
 	exePath, err := os.Executable()
@@ -1220,11 +1282,22 @@ func redactRuntimeError(err error, secrets ...string) string {
 
 func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 	failures := make([]string, 0)
+	failJob := func(errorSummary string, auditDescription string) {
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), errorSummary)
+		jobEvents.publish(jobID, gin.H{
+			"type":    "complete",
+			"status":  string(jobstate.JobFailed),
+			"message": errorSummary,
+		})
+		publishJobStateEvent(jobID)
+		if auditDescription != "" {
+			_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), auditDescription, "failed", "", "")
+		}
+	}
 
 	mysqlCfg, err := storage.GetMySQLConfig(systemDB, fieldKey, true)
 	if err != nil || mysqlCfg.Host == "" {
-		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), "MySQL 配置不可用")
-		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "MySQL 配置不可用", "failed", "", "")
+		failJob("MySQL 配置不可用", "MySQL 配置不可用")
 		return
 	}
 
@@ -1239,28 +1312,25 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 	})
 	if err != nil {
 		message := redactRuntimeError(err, mysqlCfg.Password)
-		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), message)
-		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "连接 MySQL 失败", "failed", "", "")
+		failJob(message, "连接 MySQL 失败")
 		return
 	}
 	defer database.Close()
 
 	if err := database.Ping(); err != nil {
 		message := redactRuntimeError(err, mysqlCfg.Password)
-		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), message)
-		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "MySQL 连接测试失败", "failed", "", "")
+		failJob(message, "MySQL 连接测试失败")
 		return
 	}
 	if err := initDatabase(database); err != nil {
 		message := redactRuntimeError(err, mysqlCfg.Password)
-		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), message)
-		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "初始化 MySQL 表失败", "failed", "", "")
+		failJob(message, "初始化 MySQL 表失败")
 		return
 	}
 
 	programs, err := storage.ListEnabledMiniProgramsWithSecret(systemDB, fieldKey)
 	if err != nil {
-		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), "读取小程序配置失败")
+		failJob("读取小程序配置失败", "读取小程序配置失败")
 		return
 	}
 	programByID := make(map[int64]storage.MiniProgram, len(programs))
@@ -1270,7 +1340,7 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 
 	steps, err := storage.ListFetchJobSteps(systemDB, jobID)
 	if err != nil {
-		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), "读取任务步骤失败")
+		failJob("读取任务步骤失败", "读取任务步骤失败")
 		return
 	}
 
@@ -1280,9 +1350,17 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 	logChan := make(chan string, 100)
 	defer close(logChan)
 	go func() {
-		for range logChan {
+		for line := range logChan {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			jobEvents.publish(jobID, gin.H{
+				"type":    "log",
+				"message": line,
+			})
 		}
 	}()
+	jobEvents.publish(jobID, gin.H{"type": "log", "message": "开始执行拉取任务"})
 
 	for _, step := range steps {
 		if step.Status == string(jobstate.StepSuccess) {
@@ -1297,19 +1375,49 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		if !ok {
 			message := "小程序已禁用或不存在"
 			_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepFailed), 0, message)
+			jobEvents.publish(jobID, gin.H{
+				"type":        "step",
+				"status":      string(jobstate.StepFailed),
+				"programId":   step.ProgramID,
+				"programName": step.ProgramName,
+				"stepType":    step.StepType,
+				"error":       message,
+			})
+			publishJobStateEvent(jobID)
 			failures = append(failures, fmt.Sprintf("%s: %s", step.ProgramName, message))
 			continue
 		}
 
 		if err := storage.MarkFetchJobStepRunning(systemDB, step.ID, program.ID, program.Name, step.StepType); err != nil {
+			jobEvents.publish(jobID, gin.H{
+				"type":    "log",
+				"message": fmt.Sprintf("%s: 更新步骤状态失败", step.ProgramName),
+			})
 			failures = append(failures, fmt.Sprintf("%s: 更新步骤状态失败", step.ProgramName))
 			continue
 		}
+		jobEvents.publish(jobID, gin.H{
+			"type":        "step",
+			"status":      string(jobstate.StepRunning),
+			"programId":   program.ID,
+			"programName": program.Name,
+			"stepType":    step.StepType,
+		})
+		publishJobStateEvent(jobID)
 
 		token, err := getTokenWithCache(program.AppID, program.AppSecret)
 		if err != nil {
 			message := redactRuntimeError(err, program.AppSecret)
 			_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepFailed), 0, message)
+			jobEvents.publish(jobID, gin.H{
+				"type":        "step",
+				"status":      string(jobstate.StepFailed),
+				"programId":   program.ID,
+				"programName": program.Name,
+				"stepType":    step.StepType,
+				"error":       message,
+			})
+			publishJobStateEvent(jobID)
 			failures = append(failures, fmt.Sprintf("%s/%s: %s", program.Name, step.StepType, message))
 			continue
 		}
@@ -1336,10 +1444,29 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		if err != nil {
 			message := redactRuntimeError(err, mysqlCfg.Password, program.AppSecret)
 			_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepFailed), recordCount, message)
+			jobEvents.publish(jobID, gin.H{
+				"type":        "step",
+				"status":      string(jobstate.StepFailed),
+				"programId":   program.ID,
+				"programName": program.Name,
+				"stepType":    step.StepType,
+				"recordCount": recordCount,
+				"error":       message,
+			})
+			publishJobStateEvent(jobID)
 			failures = append(failures, fmt.Sprintf("%s/%s: %s", program.Name, step.StepType, message))
 			continue
 		}
 		_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepSuccess), recordCount, "")
+		jobEvents.publish(jobID, gin.H{
+			"type":        "step",
+			"status":      string(jobstate.StepSuccess),
+			"programId":   program.ID,
+			"programName": program.Name,
+			"stepType":    step.StepType,
+			"recordCount": recordCount,
+		})
+		publishJobStateEvent(jobID)
 	}
 
 	stillRunning, err := storage.IsFetchJobRunning(systemDB, jobID)
@@ -1358,6 +1485,12 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		errorSummary = strings.Join(failures, "; ")
 	}
 	_, _ = storage.SetFetchJobTerminal(systemDB, jobID, finalStatus, errorSummary)
+	jobEvents.publish(jobID, gin.H{
+		"type":    "complete",
+		"status":  finalStatus,
+		"message": storage.JobStatusLabel(finalStatus),
+	})
+	publishJobStateEvent(jobID)
 	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, action, "job", fmt.Sprintf("%d", jobID), storage.JobStatusLabel(finalStatus), result, "", "")
 }
 
@@ -1409,6 +1542,7 @@ func localStartJobHandler(c *gin.Context) {
 	}
 
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_START", "job", fmt.Sprintf("%d", job.ID), "开始拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	jobEvents.publish(job.ID, gin.H{"type": "log", "message": "任务已创建"})
 	go runFetchJob(job.ID, userID, username)
 	utils.Success(c, gin.H{"job": job})
 }
@@ -1436,6 +1570,12 @@ func localInterruptJobHandler(c *gin.Context) {
 		return
 	}
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_INTERRUPT", "job", fmt.Sprintf("%d", job.ID), "中断拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	jobEvents.publish(jobID, gin.H{
+		"type":    "complete",
+		"status":  job.Status,
+		"message": "任务已中断",
+	})
+	publishJobStateEvent(jobID)
 	utils.Success(c, gin.H{"job": job})
 }
 
@@ -1462,6 +1602,8 @@ func localResumeJobHandler(c *gin.Context) {
 		return
 	}
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_RESUME", "job", fmt.Sprintf("%d", job.ID), "继续拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	jobEvents.publish(jobID, gin.H{"type": "log", "message": "任务继续执行"})
+	publishJobStateEvent(jobID)
 	go runFetchJob(job.ID, userID, username)
 	utils.Success(c, gin.H{"job": job})
 }
@@ -1489,6 +1631,12 @@ func localEndJobHandler(c *gin.Context) {
 		return
 	}
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_END", "job", fmt.Sprintf("%d", job.ID), "结束拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	jobEvents.publish(jobID, gin.H{
+		"type":    "complete",
+		"status":  job.Status,
+		"message": "任务已结束",
+	})
+	publishJobStateEvent(jobID)
 	utils.Success(c, gin.H{"job": job})
 }
 
@@ -1533,6 +1681,72 @@ func localJobDetailHandler(c *gin.Context) {
 		return
 	}
 	utils.Success(c, gin.H{"job": job, "steps": steps})
+}
+
+func localJobEventsHandler(c *gin.Context) {
+	jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的任务 ID")
+		return
+	}
+	userID, _, role := currentIdentity(c)
+	job, err := storage.GetFetchJobByID(systemDB, jobID)
+	if err != nil || job == nil {
+		utils.Error(c, 404, "任务不存在")
+		return
+	}
+	if !storage.CanOperateJob(job, userID, role) {
+		utils.Error(c, 403, "无权查看该任务")
+		return
+	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		utils.Error(c, 500, "当前连接不支持实时日志")
+		return
+	}
+
+	ch := jobEvents.subscribe(jobID)
+	defer jobEvents.unsubscribe(jobID, ch)
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	c.Writer.Header().Set("Cache-Control", "no-cache, no-transform")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+
+	ready, _ := json.Marshal(gin.H{
+		"type":            "ready",
+		"status":          job.Status,
+		"progressPercent": job.ProgressPercent,
+		"time":            time.Now().Format("15:04:05"),
+	})
+	if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", ready); err != nil {
+		return
+	}
+	flusher.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case data, ok := <-ch:
+			if !ok {
+				return
+			}
+			if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", data); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-ticker.C:
+			if _, err := fmt.Fprint(c.Writer, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func loginHandler(c *gin.Context) {
@@ -2991,6 +3205,7 @@ func main() {
 		api.GET("/mini-programs", localListProgramsHandler)
 		api.GET("/jobs/current", localCurrentJobHandler)
 		api.GET("/jobs", localListJobsHandler)
+		api.GET("/jobs/:id/events", localJobEventsHandler)
 		api.GET("/jobs/:id", localJobDetailHandler)
 		api.POST("/jobs/start", localStartJobHandler)
 		api.POST("/jobs/:id/interrupt", localInterruptJobHandler)

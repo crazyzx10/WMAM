@@ -3,6 +3,7 @@ import { Pause, Play, Square, StepForward } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle } from "../components/ui/Card";
 import { apiRequest } from "../lib/api";
+import { getStoredToken } from "../lib/auth";
 
 type Job = {
   id: number;
@@ -46,6 +47,17 @@ type ProgramsResponse = {
   programs: Program[];
 };
 
+type JobEvent = {
+  type: "ready" | "log" | "step" | "job" | "complete";
+  time?: string;
+  message?: string;
+  status?: string;
+  programName?: string;
+  stepType?: JobStep["stepType"];
+  recordCount?: number;
+  error?: string;
+};
+
 const emptyPermissions: Permissions = {
   canStart: true,
   canInterrupt: false,
@@ -71,12 +83,47 @@ const statusLabels: Record<string, string> = {
   skipped: "跳过"
 };
 
+const actionLogLabels: Record<"interrupt" | "resume" | "end", string> = {
+  interrupt: "已中断",
+  resume: "继续",
+  end: "已结束"
+};
+
 function stepMark(status?: string) {
   if (status === "success") return "✓";
   if (status === "running") return "●";
   if (status === "failed") return "×";
   if (status === "skipped") return "–";
   return "-";
+}
+
+function formatJobEvent(event: JobEvent) {
+  const time = event.time ?? new Date().toLocaleTimeString();
+
+  if (event.type === "ready" || event.type === "job") {
+    return null;
+  }
+  if (event.type === "log") {
+    return `[${time}] ${event.message ?? ""}`;
+  }
+  if (event.type === "complete") {
+    return `[${time}] ${event.message ?? statusLabels[event.status ?? ""] ?? "任务状态已更新"}`;
+  }
+  if (event.type === "step") {
+    const stepName = stepLabels[event.stepType as JobStep["stepType"]] ?? event.stepType ?? "步骤";
+    const target = `${event.programName ?? "小程序"} / ${stepName}`;
+    if (event.status === "running") {
+      return `[${time}] 开始 ${target}`;
+    }
+    if (event.status === "success") {
+      const countText = typeof event.recordCount === "number" ? `，${event.recordCount} 条` : "";
+      return `[${time}] 完成 ${target}${countText}`;
+    }
+    if (event.status === "failed") {
+      return `[${time}] 失败 ${target}${event.error ? `：${event.error}` : ""}`;
+    }
+  }
+  return null;
 }
 
 export function FetchPage() {
@@ -117,6 +164,68 @@ export function FetchPage() {
     return () => window.clearInterval(timer);
   }, [job?.status]);
 
+  useEffect(() => {
+    if (!job?.id || job.status !== "running") {
+      return;
+    }
+
+    const controller = new AbortController();
+    const decoder = new TextDecoder();
+    const jobId = job.id;
+
+    async function connectLogStream() {
+      try {
+        const token = getStoredToken();
+        const response = await fetch(`/api/jobs/${jobId}/events`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          signal: controller.signal
+        });
+        if (!response.ok || !response.body) {
+          throw new Error("实时日志连接失败");
+        }
+
+        const reader = response.body.getReader();
+        let buffer = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split(/\r?\n\r?\n/);
+          buffer = blocks.pop() ?? "";
+
+          for (const block of blocks) {
+            const data = block
+              .split(/\r?\n/)
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.replace(/^data:\s?/, ""))
+              .join("\n");
+            if (!data) {
+              continue;
+            }
+
+            const event = JSON.parse(data) as JobEvent;
+            const line = formatJobEvent(event);
+            if (line) {
+              setLogs((current) => [...current, line].slice(-500));
+            }
+            if (event.type === "step" || event.type === "job" || event.type === "complete") {
+              void loadState();
+            }
+          }
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setLogs((current) => [...current, `[${new Date().toLocaleTimeString()}] 实时日志连接中断`].slice(-500));
+        }
+      }
+    }
+
+    void connectLogStream();
+    return () => controller.abort();
+  }, [job?.id, job?.status]);
+
   const rows = useMemo(() => {
     const byProgram = new Map<string, Record<string, string>>();
     for (const step of steps) {
@@ -147,10 +256,10 @@ export function FetchPage() {
     try {
       if (action === "start") {
         const data = await apiRequest<{ job: Job }>("/api/jobs/start", { method: "POST" });
-        setLogs((current) => [...current, `[${new Date().toLocaleTimeString()}] 已创建任务 #${data.job.id}`]);
+        setLogs([`[${new Date().toLocaleTimeString()}] 已创建任务 #${data.job.id}`]);
       } else if (job) {
         await apiRequest(`/api/jobs/${job.id}/${action}`, { method: "POST" });
-        setLogs((current) => [...current, `[${new Date().toLocaleTimeString()}] ${statusLabels[action] ?? action}任务 #${job.id}`]);
+        setLogs((current) => [...current, `[${new Date().toLocaleTimeString()}] ${actionLogLabels[action]}任务 #${job.id}`]);
       }
       await loadState();
     } catch (err) {
