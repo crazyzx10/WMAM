@@ -17,6 +17,7 @@ import { FetchPage } from "../pages/FetchPage";
 import { LogsPage } from "../pages/LogsPage";
 import { LoginPage } from "../pages/LoginPage";
 import { ProgramsPage } from "../pages/ProgramsPage";
+import { RecoverAdminPage } from "../pages/RecoverAdminPage";
 import { SystemPage } from "../pages/SystemPage";
 import { UsersPage } from "../pages/UsersPage";
 
@@ -135,6 +136,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/recover-admin" element={<RecoverAdminPage />} />
       <Route path="/change-password" element={<ProtectedChangePasswordRoute />} />
       <Route path="/app/*" element={<ProtectedRoute />} />
       <Route path="*" element={<Navigate to="/app/fetch" replace />} />

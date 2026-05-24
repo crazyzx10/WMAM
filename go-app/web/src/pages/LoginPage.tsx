@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { Lock, Moon, Sun, User } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { apiRequest } from "../lib/api";
@@ -103,6 +103,11 @@ export function LoginPage() {
             {loading ? "登录中" : "登录"}
           </Button>
         </form>
+        <div className="mt-5 text-center text-sm text-muted-foreground">
+          <Link to="/recover-admin" className="hover:text-foreground">
+            使用恢复码重置管理员密码
+          </Link>
+        </div>
       </Card>
     </div>
   );

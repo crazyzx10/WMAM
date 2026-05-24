@@ -128,6 +128,49 @@ VALUES ('admin', ?, 'admin', 'active', 1, CURRENT_TIMESTAMP)
 	return err == nil, err
 }
 
+func GetAdminUser(db *sql.DB) (*SystemUser, error) {
+	return scanSystemUser(db.QueryRow(`
+SELECT id, username, password_hash, role, status, must_change_password,
+       created_at, updated_at, COALESCE(last_login_at, '')
+FROM users
+WHERE role = 'admin'
+LIMIT 1
+`))
+}
+
+func EnsureAdminRecoveryHash(db *sql.DB, recoveryHash string) (bool, error) {
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM admin_recovery WHERE id = 1").Scan(&count); err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return false, nil
+	}
+	_, err := db.Exec(`
+INSERT INTO admin_recovery (id, recovery_hash)
+VALUES (1, ?)
+`, recoveryHash)
+	return err == nil, err
+}
+
+func GetAdminRecoveryHash(db *sql.DB) (string, error) {
+	var hash string
+	err := db.QueryRow("SELECT recovery_hash FROM admin_recovery WHERE id = 1").Scan(&hash)
+	return hash, err
+}
+
+func ReplaceAdminRecoveryHash(db *sql.DB, recoveryHash string) error {
+	_, err := db.Exec(`
+INSERT INTO admin_recovery (id, recovery_hash, created_at, used_at)
+VALUES (1, ?, CURRENT_TIMESTAMP, NULL)
+ON CONFLICT(id) DO UPDATE SET
+    recovery_hash = excluded.recovery_hash,
+    created_at = CURRENT_TIMESTAMP,
+    used_at = NULL
+`, recoveryHash)
+	return err
+}
+
 func GetUserByID(db *sql.DB, id int64) (*SystemUser, error) {
 	return scanSystemUser(db.QueryRow(`
 SELECT id, username, password_hash, role, status, must_change_password,

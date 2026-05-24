@@ -36,6 +36,23 @@ func TestSystemStorageFoundation(t *testing.T) {
 		t.Fatalf("unexpected admin state: role=%s status=%s", admin.Role, admin.Status)
 	}
 
+	created, err = EnsureAdminRecoveryHash(db, "recovery-hash")
+	if err != nil {
+		t.Fatalf("EnsureAdminRecoveryHash() error = %v", err)
+	}
+	if !created {
+		t.Fatal("expected recovery hash to be created")
+	}
+	if hash, err := GetAdminRecoveryHash(db); err != nil || hash != "recovery-hash" {
+		t.Fatalf("unexpected recovery hash: %q err=%v", hash, err)
+	}
+	if err := ReplaceAdminRecoveryHash(db, "next-recovery-hash"); err != nil {
+		t.Fatalf("ReplaceAdminRecoveryHash() error = %v", err)
+	}
+	if hash, err := GetAdminRecoveryHash(db); err != nil || hash != "next-recovery-hash" {
+		t.Fatalf("unexpected replaced recovery hash: %q err=%v", hash, err)
+	}
+
 	if _, err := CreateUser(db, "alice", "hashed-password", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

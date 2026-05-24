@@ -528,6 +528,62 @@ func localLoginHandler(c *gin.Context) {
 	})
 }
 
+func localRecoverAdminHandler(c *gin.Context) {
+	var req struct {
+		RecoveryCode string `json:"recoveryCode" binding:"required"`
+		NewPassword  string `json:"newPassword" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		utils.Error(c, 400, "新密码至少需要 8 位")
+		return
+	}
+
+	recoveryHash, err := storage.GetAdminRecoveryHash(systemDB)
+	if err != nil || !utils.CheckPassword(req.RecoveryCode, recoveryHash) {
+		utils.Error(c, 403, "恢复码无效")
+		return
+	}
+
+	admin, err := storage.GetAdminUser(systemDB)
+	if err != nil {
+		utils.Error(c, 500, "管理员账号不存在")
+		return
+	}
+	passwordHash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		utils.Error(c, 500, "密码加密失败")
+		return
+	}
+	if err := storage.UpdateUserPassword(systemDB, admin.ID, passwordHash, false); err != nil {
+		utils.Error(c, 500, "重置管理员密码失败")
+		return
+	}
+	_ = storage.RevokeUserSessions(systemDB, admin.ID)
+
+	nextRecoveryCode, err := security.NewRecoveryCode()
+	if err != nil {
+		utils.Error(c, 500, "生成新恢复码失败")
+		return
+	}
+	nextRecoveryHash, err := utils.HashPassword(nextRecoveryCode)
+	if err != nil {
+		utils.Error(c, 500, "保存新恢复码失败")
+		return
+	}
+	if err := storage.ReplaceAdminRecoveryHash(systemDB, nextRecoveryHash); err != nil {
+		utils.Error(c, 500, "保存新恢复码失败")
+		return
+	}
+
+	_ = storage.CreateAuditLog(systemDB, &admin.ID, admin.Username, "ADMIN_RECOVERY_RESET", "user", fmt.Sprintf("%d", admin.ID), "使用恢复码重置管理员密码", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"newRecoveryCode": nextRecoveryCode})
+}
+
 func localCurrentUserHandler(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	id, ok := userID.(int64)
@@ -2816,6 +2872,21 @@ func main() {
 	if adminCreated {
 		log.Println("默认管理员账号已创建: admin / admin123")
 	}
+	recoveryCode, err := security.NewRecoveryCode()
+	if err != nil {
+		log.Fatalf("生成管理员恢复码失败: %v", err)
+	}
+	recoveryHash, err := utils.HashPassword(recoveryCode)
+	if err != nil {
+		log.Fatalf("保存管理员恢复码失败: %v", err)
+	}
+	recoveryCreated, err := storage.EnsureAdminRecoveryHash(systemDB, recoveryHash)
+	if err != nil {
+		log.Fatalf("保存管理员恢复码失败: %v", err)
+	}
+	if recoveryCreated {
+		log.Printf("管理员恢复码仅显示一次，请保存: %s", recoveryCode)
+	}
 
 	startTokenCleanupJob()
 
@@ -2829,6 +2900,7 @@ func main() {
 	auth := r.Group("/api")
 	{
 		auth.POST("/auth/login", localLoginHandler)
+		auth.POST("/auth/recover-admin", localRecoverAdminHandler)
 		auth.POST("/auth/logout", localAuthMiddleware(), localLogoutHandler)
 		auth.GET("/auth/me", localAuthMiddleware(), localCurrentUserHandler)
 		auth.POST("/auth/change-password", localAuthMiddleware(), localChangePasswordHandler)
