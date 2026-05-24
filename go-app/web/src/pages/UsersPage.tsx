@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
 type UserRow = {
@@ -19,6 +20,7 @@ type UsersResponse = {
 };
 
 export function UsersPage() {
+  const { toast } = useToast();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -56,9 +58,12 @@ export function UsersPage() {
       setUsername("");
       setPassword("");
       setMessage("用户已创建");
+      toast({ title: "用户已创建", variant: "success" });
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "创建用户失败");
+      const message = err instanceof Error ? err.message : "创建用户失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -72,9 +77,12 @@ export function UsersPage() {
         body: JSON.stringify({ username: user.username, status: nextStatus })
       });
       setMessage(nextStatus === "active" ? "用户已启用" : "用户已禁用");
+      toast({ title: nextStatus === "active" ? "用户已启用" : "用户已禁用", variant: "success" });
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新用户失败");
+      const message = err instanceof Error ? err.message : "更新用户失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -89,9 +97,12 @@ export function UsersPage() {
       });
       setResetPasswordById((current) => ({ ...current, [user.id]: "" }));
       setMessage("密码已重置");
+      toast({ title: "密码已重置", variant: "success" });
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "重置密码失败");
+      const message = err instanceof Error ? err.message : "重置密码失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -104,9 +115,12 @@ export function UsersPage() {
     try {
       await apiRequest(`/api/users/${user.id}`, { method: "DELETE" });
       setMessage("用户已删除");
+      toast({ title: "用户已删除", variant: "success" });
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "删除用户失败");
+      const message = err instanceof Error ? err.message : "删除用户失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 

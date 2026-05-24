@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
 type Program = {
@@ -20,6 +21,7 @@ type ProgramsResponse = {
 };
 
 export function ProgramsPage() {
+  const { toast } = useToast();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -74,17 +76,21 @@ export function ProgramsPage() {
           body: JSON.stringify({ name, appSecret, enabled })
         });
         setMessage("小程序已更新");
+        toast({ title: "小程序已更新", variant: "success" });
       } else {
         await apiRequest("/api/programs", {
           method: "POST",
           body: JSON.stringify({ name, appId, appSecret, enabled })
         });
         setMessage("小程序已创建");
+        toast({ title: "小程序已创建", variant: "success" });
       }
       resetForm();
       await loadPrograms();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存小程序失败");
+      const message = err instanceof Error ? err.message : "保存小程序失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -97,9 +103,12 @@ export function ProgramsPage() {
         body: JSON.stringify({ enabled: !program.enabled })
       });
       setMessage(program.enabled ? "小程序已禁用" : "小程序已启用");
+      toast({ title: program.enabled ? "小程序已禁用" : "小程序已启用", variant: "success" });
       await loadPrograms();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新状态失败");
+      const message = err instanceof Error ? err.message : "更新状态失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -112,9 +121,12 @@ export function ProgramsPage() {
     try {
       await apiRequest(`/api/programs/${program.id}`, { method: "DELETE" });
       setMessage("小程序已删除");
+      toast({ title: "小程序已删除", variant: "success" });
       await loadPrograms();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "删除小程序失败");
+      const message = err instanceof Error ? err.message : "删除小程序失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pause, Play, Square, StepForward } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle } from "../components/ui/Card";
+import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 import { getStoredToken } from "../lib/auth";
 
@@ -127,6 +128,7 @@ function formatJobEvent(event: JobEvent) {
 }
 
 export function FetchPage() {
+  const { toast } = useToast();
   const [job, setJob] = useState<Job | null>(null);
   const [steps, setSteps] = useState<JobStep[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -257,13 +259,17 @@ export function FetchPage() {
       if (action === "start") {
         const data = await apiRequest<{ job: Job }>("/api/jobs/start", { method: "POST" });
         setLogs([`[${new Date().toLocaleTimeString()}] 已创建任务 #${data.job.id}`]);
+        toast({ title: `任务 #${data.job.id} 已开始`, variant: "success" });
       } else if (job) {
         await apiRequest(`/api/jobs/${job.id}/${action}`, { method: "POST" });
         setLogs((current) => [...current, `[${new Date().toLocaleTimeString()}] ${actionLogLabels[action]}任务 #${job.id}`]);
+        toast({ title: `${actionLogLabels[action]}任务 #${job.id}`, variant: "success" });
       }
       await loadState();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      const message = err instanceof Error ? err.message : "操作失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 

@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { DatabaseZap, RotateCcw, Save } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 import { getStoredToken } from "../lib/auth";
 
@@ -28,6 +29,7 @@ const emptyConfig: MySQLConfig = {
 };
 
 export function SystemPage() {
+  const { toast } = useToast();
   const [config, setConfig] = useState<MySQLConfig>(emptyConfig);
   const [adminPassword, setAdminPassword] = useState("");
   const [backupPassword, setBackupPassword] = useState("");
@@ -66,8 +68,11 @@ export function SystemPage() {
         body: JSON.stringify(config)
       });
       setMessage("连接成功");
+      toast({ title: "MySQL 连接成功", variant: "success" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "连接失败");
+      const message = err instanceof Error ? err.message : "连接失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -83,9 +88,12 @@ export function SystemPage() {
       setConfig((current) => ({ ...current, password: "", passwordSet: true }));
       setAdminPassword("");
       setMessage("数据库配置已保存");
+      toast({ title: "数据库配置已保存", variant: "success" });
       await loadConfig();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      const message = err instanceof Error ? err.message : "保存失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -102,9 +110,12 @@ export function SystemPage() {
       });
       setAdminPassword("");
       setMessage("已恢复上一份可用配置");
+      toast({ title: "已恢复上一份可用配置", variant: "success" });
       await loadConfig();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "恢复失败");
+      const message = err instanceof Error ? err.message : "恢复失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
@@ -131,14 +142,18 @@ export function SystemPage() {
       link.click();
       URL.revokeObjectURL(url);
       setMessage("备份已导出");
+      toast({ title: "备份已导出", variant: "success" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "导出失败");
+      const message = err instanceof Error ? err.message : "导出失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
   async function handleImport() {
     if (!backupFile) {
       setError("请选择备份文件");
+      toast({ title: "请选择备份文件", variant: "danger" });
       return;
     }
     if (!window.confirm("导入会覆盖当前本地系统配置，确认继续？")) {
@@ -163,8 +178,11 @@ export function SystemPage() {
         throw new Error(payload.message || "导入失败");
       }
       setMessage("备份已导入，请重新登录");
+      toast({ title: "备份已导入，请重新登录", variant: "success" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "导入失败");
+      const message = err instanceof Error ? err.message : "导入失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
     }
   }
 
