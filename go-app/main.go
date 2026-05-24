@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"go-app/internal/appconfig"
+	"go-app/internal/security"
 	"go-app/internal/storage"
 	"go-app/middleware"
 	"go-app/models"
@@ -65,6 +66,7 @@ var (
 	tokenCaches = sync.Map{}
 	db          *sql.DB
 	systemDB    *sql.DB
+	fieldKey    []byte
 )
 
 func init() {
@@ -795,6 +797,269 @@ func localGetLogsHandler(c *gin.Context) {
 	}
 
 	utils.Success(c, gin.H{"logs": logs, "total": total})
+}
+
+func testStoredMySQLConfig(cfg storage.MySQLConfig) error {
+	database, err := getDBConnection(Config{
+		Database: DatabaseConfig{
+			Host:     cfg.Host,
+			Port:     cfg.Port,
+			User:     cfg.Username,
+			Password: cfg.Password,
+			Database: cfg.Database,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	return database.Ping()
+}
+
+func requireAdminPassword(c *gin.Context, password string) bool {
+	if strings.TrimSpace(password) == "" {
+		return true
+	}
+
+	userID, _ := c.Get("user_id")
+	id, _ := userID.(int64)
+	user, err := storage.GetUserByID(systemDB, id)
+	if err != nil || !utils.CheckPassword(password, user.PasswordHash) {
+		utils.Error(c, 403, "管理员密码错误")
+		return false
+	}
+	return true
+}
+
+func localGetMySQLConfigHandler(c *gin.Context) {
+	cfg, err := storage.GetMySQLConfig(systemDB, fieldKey, false)
+	if err != nil {
+		utils.Error(c, 500, "读取数据库配置失败")
+		return
+	}
+	utils.Success(c, gin.H{"mysql": cfg})
+}
+
+func localTestMySQLConfigHandler(c *gin.Context) {
+	var req storage.MySQLConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	current, _ := storage.GetMySQLConfig(systemDB, fieldKey, true)
+	if strings.TrimSpace(req.Password) == "" {
+		req.Password = current.Password
+	}
+	if req.Port == 0 {
+		req.Port = 3306
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	id, _ := userID.(int64)
+	name, _ := username.(string)
+
+	if err := testStoredMySQLConfig(req); err != nil {
+		_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_TEST", "system", "mysql", "测试 MySQL 连接失败", "failed", c.ClientIP(), c.GetHeader("User-Agent"))
+		utils.Error(c, 500, "连接失败："+err.Error())
+		return
+	}
+
+	_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_TEST", "system", "mysql", "测试 MySQL 连接成功", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	utils.Success(c, gin.H{"message": "连接成功"})
+}
+
+func localSaveMySQLConfigHandler(c *gin.Context) {
+	var req struct {
+		storage.MySQLConfig
+		AdminPassword string `json:"adminPassword"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+	if !requireAdminPassword(c, req.AdminPassword) {
+		return
+	}
+
+	next := req.MySQLConfig
+	current, _ := storage.GetMySQLConfig(systemDB, fieldKey, true)
+	if strings.TrimSpace(next.Password) == "" {
+		next.Password = current.Password
+	}
+	if next.Port == 0 {
+		next.Port = 3306
+	}
+	if err := testStoredMySQLConfig(next); err != nil {
+		utils.Error(c, 500, "保存前测试连接失败："+err.Error())
+		return
+	}
+
+	if err := storage.SaveMySQLConfig(systemDB, fieldKey, next); err != nil {
+		utils.Error(c, 500, "保存数据库配置失败")
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	id, _ := userID.(int64)
+	name, _ := username.(string)
+	_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_UPDATE", "system", "mysql", "修改 MySQL 配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
+}
+
+func localRestoreMySQLConfigHandler(c *gin.Context) {
+	var req struct {
+		AdminPassword string `json:"adminPassword"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if !requireAdminPassword(c, req.AdminPassword) {
+		return
+	}
+
+	if _, err := storage.RestoreLastGoodMySQLConfig(systemDB, fieldKey); err != nil {
+		utils.Error(c, 500, "恢复配置失败："+err.Error())
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	id, _ := userID.(int64)
+	name, _ := username.(string)
+	_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_RESTORE", "system", "mysql", "恢复上一份可用 MySQL 配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
+}
+
+func localListProgramsHandler(c *gin.Context) {
+	programs, err := storage.ListMiniPrograms(systemDB, false, fieldKey)
+	if err != nil {
+		utils.Error(c, 500, "获取小程序列表失败")
+		return
+	}
+	utils.Success(c, gin.H{"programs": programs})
+}
+
+func localCreateProgramHandler(c *gin.Context) {
+	var req struct {
+		Name      string `json:"name" binding:"required"`
+		AppID     string `json:"appId" binding:"required"`
+		AppSecret string `json:"appSecret" binding:"required"`
+		Enabled   *bool  `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	program, err := storage.CreateMiniProgram(systemDB, fieldKey, req.Name, req.AppID, req.AppSecret, enabled)
+	if err != nil {
+		utils.Error(c, 500, "创建小程序失败："+err.Error())
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	id, _ := userID.(int64)
+	name, _ := username.(string)
+	_ = storage.CreateAuditLog(systemDB, &id, name, "PROGRAM_CREATE", "program", fmt.Sprintf("%d", program.ID), "创建小程序："+program.Name, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"program": program})
+}
+
+func localUpdateProgramHandler(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的小程序 ID")
+		return
+	}
+	var req struct {
+		Name      string `json:"name" binding:"required"`
+		AppSecret string `json:"appSecret"`
+		Enabled   bool   `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	program, err := storage.UpdateMiniProgram(systemDB, fieldKey, id, req.Name, req.AppSecret, req.Enabled)
+	if err != nil {
+		utils.Error(c, 500, "更新小程序失败："+err.Error())
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	operatorID, _ := userID.(int64)
+	operatorName, _ := username.(string)
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "PROGRAM_UPDATE", "program", fmt.Sprintf("%d", program.ID), "更新小程序："+program.Name, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"program": program})
+}
+
+func localSetProgramStatusHandler(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的小程序 ID")
+		return
+	}
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+
+	program, err := storage.SetMiniProgramEnabled(systemDB, id, req.Enabled)
+	if err != nil {
+		utils.Error(c, 500, "更新状态失败："+err.Error())
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	operatorID, _ := userID.(int64)
+	operatorName, _ := username.(string)
+	action := "PROGRAM_DISABLE"
+	if req.Enabled {
+		action = "PROGRAM_ENABLE"
+	}
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, action, "program", fmt.Sprintf("%d", program.ID), "更新小程序状态："+program.Name, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"program": program})
+}
+
+func localDeleteProgramHandler(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的小程序 ID")
+		return
+	}
+	program, err := storage.GetMiniProgramByID(systemDB, id, false, fieldKey)
+	if err != nil {
+		utils.Error(c, 404, "小程序不存在")
+		return
+	}
+	if err := storage.DeleteMiniProgram(systemDB, id); err != nil {
+		utils.Error(c, 500, "删除小程序失败："+err.Error())
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	operatorID, _ := userID.(int64)
+	operatorName, _ := username.(string)
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "PROGRAM_DELETE", "program", fmt.Sprintf("%d", program.ID), "删除小程序："+program.Name, "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, nil)
 }
 
 func loginHandler(c *gin.Context) {
@@ -2188,6 +2453,11 @@ func main() {
 		log.Fatalf("读取配置失败: %v", err)
 	}
 
+	fieldKey, err = security.LoadOrCreateFieldKey(appCfg.Data.Dir)
+	if err != nil {
+		log.Fatalf("初始化字段加密密钥失败: %v", err)
+	}
+
 	systemDB, err = storage.OpenSystemDB(appCfg.Data.Dir)
 	if err != nil {
 		log.Fatalf("初始化本地系统存储失败: %v", err)
@@ -2227,12 +2497,10 @@ func main() {
 	api.Use(localAuthMiddleware())
 	{
 		api.GET("/dashboard/stats", localDashboardStatsHandler)
-		api.GET("/mini-programs", getMiniProgramsHandler)
+		api.GET("/programs", localListProgramsHandler)
+		api.GET("/mini-programs", localListProgramsHandler)
 		api.POST("/fetch/execute", executeFetchHandler)
 		api.GET("/logs", localGetLogsHandler)
-		api.GET("/config", getConfigHandler)
-		api.POST("/config", saveConfigHandler)
-		api.POST("/test-connection", testConnectionHandler)
 	}
 
 	admin := r.Group("/api")
@@ -2243,6 +2511,17 @@ func main() {
 		admin.PUT("/users/:id", localUpdateUserHandler)
 		admin.POST("/users/:id/reset-password", localResetUserPasswordHandler)
 		admin.DELETE("/users/:id", localDeleteUserHandler)
+		admin.GET("/system/mysql", localGetMySQLConfigHandler)
+		admin.POST("/system/mysql/test", localTestMySQLConfigHandler)
+		admin.PUT("/system/mysql", localSaveMySQLConfigHandler)
+		admin.POST("/system/mysql/restore-last-good", localRestoreMySQLConfigHandler)
+		admin.GET("/config", localGetMySQLConfigHandler)
+		admin.POST("/test-connection", localTestMySQLConfigHandler)
+		admin.POST("/config", localSaveMySQLConfigHandler)
+		admin.POST("/programs", localCreateProgramHandler)
+		admin.PUT("/programs/:id", localUpdateProgramHandler)
+		admin.POST("/programs/:id/status", localSetProgramStatusHandler)
+		admin.DELETE("/programs/:id", localDeleteProgramHandler)
 	}
 
 	port := appCfg.Server.Port
