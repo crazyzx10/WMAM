@@ -60,6 +60,19 @@ This branch implements the first multi-user Web application foundation for WMAM.
    - React + Vite + Tailwind CSS + Lucide
    - Built frontend bundle is emitted to `go-app/frontend`
    - Go embeds and serves the built frontend
+   - Light/dark theme toggle
+   - Collapsible desktop sidebar
+   - Toast notifications for core operations
+   - Job history detail modal
+
+10. Runtime reliability
+    - Embedded frontend routing works with `/api/*` routes
+    - Fetch job lock heartbeat refreshes the active job lock
+    - Expired fetch locks are marked failed and released before new jobs start
+
+11. Deployment documentation
+    - `WMAM-Deployment-Guide.md` documents local and server deployment
+    - `README.md` is updated for the multi-user Web version
 
 ## Verification
 
