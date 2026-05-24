@@ -149,3 +149,72 @@ func TestConfigAndMiniPrograms(t *testing.T) {
 		t.Fatalf("expected disabled program to be excluded, got %+v", programs)
 	}
 }
+
+func TestFetchJobStateMachineAndPermissions(t *testing.T) {
+	db, err := OpenSystemDB(t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenSystemDB() error = %v", err)
+	}
+	defer db.Close()
+
+	fieldKey := []byte("12345678901234567890123456789012")
+	if _, err := EnsureDefaultAdmin(db, "hashed-password"); err != nil {
+		t.Fatalf("EnsureDefaultAdmin() error = %v", err)
+	}
+	admin, err := GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+
+	program, err := CreateMiniProgram(db, fieldKey, "Demo", "wx1234567890abcd", "app-secret", true)
+	if err != nil {
+		t.Fatalf("CreateMiniProgram() error = %v", err)
+	}
+
+	job, err := CreateFetchJob(db, admin.ID, admin.Username, []MiniProgram{*program})
+	if err != nil {
+		t.Fatalf("CreateFetchJob() error = %v", err)
+	}
+	if job.Status != "running" || job.TotalSteps != 4 {
+		t.Fatalf("unexpected started job: %+v", job)
+	}
+	if _, err := CreateFetchJob(db, 2, "alice", []MiniProgram{*program}); err == nil {
+		t.Fatal("expected concurrent running job creation to fail")
+	}
+
+	permissions := ComputeJobPermissions(job, admin.ID+1, "user")
+	if permissions.CanInterrupt || permissions.CanEnd || permissions.CanResume {
+		t.Fatalf("expected ordinary non-owner to have no controls: %+v", permissions)
+	}
+	permissions = ComputeJobPermissions(job, admin.ID+1, "admin")
+	if !permissions.CanInterrupt || !permissions.CanEnd {
+		t.Fatalf("expected admin to operate another user's running job: %+v", permissions)
+	}
+
+	job, err = InterruptFetchJob(db, job.ID)
+	if err != nil {
+		t.Fatalf("InterruptFetchJob() error = %v", err)
+	}
+	if job.Status != "interrupted" {
+		t.Fatalf("expected interrupted job, got %+v", job)
+	}
+
+	job, err = ResumeFetchJob(db, job.ID, admin.ID, admin.Username)
+	if err != nil {
+		t.Fatalf("ResumeFetchJob() error = %v", err)
+	}
+	if job.Status != "running" {
+		t.Fatalf("expected resumed running job, got %+v", job)
+	}
+
+	job, err = EndFetchJob(db, job.ID)
+	if err != nil {
+		t.Fatalf("EndFetchJob() error = %v", err)
+	}
+	if job.Status != "ended" {
+		t.Fatalf("expected ended job, got %+v", job)
+	}
+	if _, err := ResumeFetchJob(db, job.ID, admin.ID, admin.Username); err == nil {
+		t.Fatal("expected ended job to be non-resumable")
+	}
+}

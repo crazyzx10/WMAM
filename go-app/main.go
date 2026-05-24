@@ -1062,6 +1062,188 @@ func localDeleteProgramHandler(c *gin.Context) {
 	utils.Success(c, nil)
 }
 
+func currentIdentity(c *gin.Context) (int64, string, string) {
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	role, _ := c.Get("role")
+	id, _ := userID.(int64)
+	name, _ := username.(string)
+	roleName, _ := role.(string)
+	return id, name, roleName
+}
+
+func localCurrentJobHandler(c *gin.Context) {
+	userID, _, role := currentIdentity(c)
+	job, err := storage.GetLatestFetchJob(systemDB)
+	if err != nil {
+		utils.Error(c, 500, "获取任务状态失败")
+		return
+	}
+	if job == nil {
+		utils.Success(c, gin.H{
+			"job":         nil,
+			"permissions": storage.ComputeJobPermissions(nil, userID, role),
+			"steps":       []storage.FetchJobStep{},
+		})
+		return
+	}
+
+	steps := []storage.FetchJobStep{}
+	if storage.CanOperateJob(job, userID, role) {
+		loadedSteps, err := storage.ListFetchJobSteps(systemDB, job.ID)
+		if err != nil {
+			utils.Error(c, 500, "获取任务步骤失败")
+			return
+		}
+		steps = loadedSteps
+	}
+
+	utils.Success(c, gin.H{
+		"job":         job,
+		"permissions": storage.ComputeJobPermissions(job, userID, role),
+		"steps":       steps,
+	})
+}
+
+func localStartJobHandler(c *gin.Context) {
+	userID, username, _ := currentIdentity(c)
+	programs, err := storage.ListEnabledMiniProgramsWithSecret(systemDB, fieldKey)
+	if err != nil {
+		utils.Error(c, 500, "读取小程序配置失败")
+		return
+	}
+
+	job, err := storage.CreateFetchJob(systemDB, userID, username, programs)
+	if err != nil {
+		utils.Error(c, 409, "创建任务失败："+err.Error())
+		return
+	}
+
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_START", "job", fmt.Sprintf("%d", job.ID), "开始拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	utils.Success(c, gin.H{"job": job})
+}
+
+func localInterruptJobHandler(c *gin.Context) {
+	jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的任务 ID")
+		return
+	}
+	userID, username, role := currentIdentity(c)
+	job, err := storage.GetFetchJobByID(systemDB, jobID)
+	if err != nil || job == nil {
+		utils.Error(c, 404, "任务不存在")
+		return
+	}
+	if !storage.CanOperateJob(job, userID, role) {
+		utils.Error(c, 403, "无权操作该任务")
+		return
+	}
+
+	job, err = storage.InterruptFetchJob(systemDB, jobID)
+	if err != nil {
+		utils.Error(c, 409, "中断任务失败："+err.Error())
+		return
+	}
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_INTERRUPT", "job", fmt.Sprintf("%d", job.ID), "中断拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	utils.Success(c, gin.H{"job": job})
+}
+
+func localResumeJobHandler(c *gin.Context) {
+	jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的任务 ID")
+		return
+	}
+	userID, username, role := currentIdentity(c)
+	job, err := storage.GetFetchJobByID(systemDB, jobID)
+	if err != nil || job == nil {
+		utils.Error(c, 404, "任务不存在")
+		return
+	}
+	if !storage.CanOperateJob(job, userID, role) {
+		utils.Error(c, 403, "无权操作该任务")
+		return
+	}
+
+	job, err = storage.ResumeFetchJob(systemDB, jobID, userID, username)
+	if err != nil {
+		utils.Error(c, 409, "继续任务失败："+err.Error())
+		return
+	}
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_RESUME", "job", fmt.Sprintf("%d", job.ID), "继续拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	utils.Success(c, gin.H{"job": job})
+}
+
+func localEndJobHandler(c *gin.Context) {
+	jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的任务 ID")
+		return
+	}
+	userID, username, role := currentIdentity(c)
+	job, err := storage.GetFetchJobByID(systemDB, jobID)
+	if err != nil || job == nil {
+		utils.Error(c, 404, "任务不存在")
+		return
+	}
+	if !storage.CanOperateJob(job, userID, role) {
+		utils.Error(c, 403, "无权操作该任务")
+		return
+	}
+
+	job, err = storage.EndFetchJob(systemDB, jobID)
+	if err != nil {
+		utils.Error(c, 409, "结束任务失败："+err.Error())
+		return
+	}
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_END", "job", fmt.Sprintf("%d", job.ID), "结束拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	utils.Success(c, gin.H{"job": job})
+}
+
+func localListJobsHandler(c *gin.Context) {
+	userID, _, role := currentIdentity(c)
+	page := 1
+	if pageStr := c.Query("page"); pageStr != "" {
+		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	limit := 20
+	offset := (page - 1) * limit
+
+	jobs, total, err := storage.ListFetchJobs(systemDB, userID, role == "admin", offset, limit)
+	if err != nil {
+		utils.Error(c, 500, "获取任务列表失败")
+		return
+	}
+	utils.Success(c, gin.H{"jobs": jobs, "total": total})
+}
+
+func localJobDetailHandler(c *gin.Context) {
+	jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		utils.Error(c, 400, "无效的任务 ID")
+		return
+	}
+	userID, _, role := currentIdentity(c)
+	job, err := storage.GetFetchJobByID(systemDB, jobID)
+	if err != nil || job == nil {
+		utils.Error(c, 404, "任务不存在")
+		return
+	}
+	if !storage.CanOperateJob(job, userID, role) {
+		utils.Error(c, 403, "无权查看该任务")
+		return
+	}
+	steps, err := storage.ListFetchJobSteps(systemDB, job.ID)
+	if err != nil {
+		utils.Error(c, 500, "获取任务步骤失败")
+		return
+	}
+	utils.Success(c, gin.H{"job": job, "steps": steps})
+}
+
 func loginHandler(c *gin.Context) {
 	var req struct {
 		Username         string `json:"username" binding:"required"`
@@ -2499,8 +2681,16 @@ func main() {
 		api.GET("/dashboard/stats", localDashboardStatsHandler)
 		api.GET("/programs", localListProgramsHandler)
 		api.GET("/mini-programs", localListProgramsHandler)
-		api.POST("/fetch/execute", executeFetchHandler)
+		api.GET("/jobs/current", localCurrentJobHandler)
+		api.GET("/jobs", localListJobsHandler)
+		api.GET("/jobs/:id", localJobDetailHandler)
+		api.POST("/jobs/start", localStartJobHandler)
+		api.POST("/jobs/:id/interrupt", localInterruptJobHandler)
+		api.POST("/jobs/:id/resume", localResumeJobHandler)
+		api.POST("/jobs/:id/end", localEndJobHandler)
+		api.POST("/fetch/execute", localStartJobHandler)
 		api.GET("/logs", localGetLogsHandler)
+		api.GET("/audit-logs", localGetLogsHandler)
 	}
 
 	admin := r.Group("/api")
