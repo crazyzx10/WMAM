@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -233,5 +234,48 @@ func TestFetchJobStateMachineAndPermissions(t *testing.T) {
 	}
 	if _, err := ResumeFetchJob(db, job.ID, admin.ID, admin.Username); err == nil {
 		t.Fatal("expected ended job to be non-resumable")
+	}
+}
+
+func TestEncryptedBackupRoundTrip(t *testing.T) {
+	db, err := OpenSystemDB(t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenSystemDB() error = %v", err)
+	}
+	defer db.Close()
+
+	fieldKey := []byte("12345678901234567890123456789012")
+	if _, err := EnsureDefaultAdmin(db, "hashed-password"); err != nil {
+		t.Fatalf("EnsureDefaultAdmin() error = %v", err)
+	}
+	if _, err := CreateMiniProgram(db, fieldKey, "Demo", "wx1234567890abcd", "app-secret", true); err != nil {
+		t.Fatalf("CreateMiniProgram() error = %v", err)
+	}
+
+	backup, err := ExportEncryptedBackup(db, fieldKey, "backup-password")
+	if err != nil {
+		t.Fatalf("ExportEncryptedBackup() error = %v", err)
+	}
+	if strings.Contains(string(backup), "app-secret") || strings.Contains(string(backup), "hashed-password") {
+		t.Fatal("expected encrypted backup not to expose sensitive payload")
+	}
+	if _, err := ImportEncryptedBackup(db, backup, "wrong-password"); err == nil {
+		t.Fatal("expected wrong backup password to fail")
+	}
+
+	importedKey, err := ImportEncryptedBackup(db, backup, "backup-password")
+	if err != nil {
+		t.Fatalf("ImportEncryptedBackup() error = %v", err)
+	}
+	if string(importedKey) != string(fieldKey) {
+		t.Fatal("expected field key to round-trip")
+	}
+
+	programs, err := ListEnabledMiniProgramsWithSecret(db, importedKey)
+	if err != nil {
+		t.Fatalf("ListEnabledMiniProgramsWithSecret() error = %v", err)
+	}
+	if len(programs) != 1 || programs[0].AppSecret != "app-secret" {
+		t.Fatalf("expected program to round-trip, got %+v", programs)
 	}
 }

@@ -362,6 +362,15 @@ WHERE user_id = ? AND revoked_at IS NULL
 	return err
 }
 
+func RevokeAllSessions(db *sql.DB) error {
+	_, err := db.Exec(`
+UPDATE sessions
+SET revoked_at = CURRENT_TIMESTAMP
+WHERE revoked_at IS NULL
+`)
+	return err
+}
+
 func RevokeSession(db *sql.DB, tokenHash string) error {
 	_, err := db.Exec(`
 UPDATE sessions

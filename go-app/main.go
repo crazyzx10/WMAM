@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -68,6 +69,7 @@ var (
 	db          *sql.DB
 	systemDB    *sql.DB
 	fieldKey    []byte
+	appDataDir  string
 )
 
 func init() {
@@ -988,6 +990,80 @@ func localRestoreMySQLConfigHandler(c *gin.Context) {
 	_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_RESTORE", "system", "mysql", "恢复上一份可用 MySQL 配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
 
 	utils.Success(c, nil)
+}
+
+func localExportBackupHandler(c *gin.Context) {
+	var req struct {
+		AdminPassword  string `json:"adminPassword"`
+		BackupPassword string `json:"backupPassword" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+	if !requireAdminPassword(c, req.AdminPassword) {
+		return
+	}
+
+	data, err := storage.ExportEncryptedBackup(systemDB, fieldKey, req.BackupPassword)
+	if err != nil {
+		utils.Error(c, 500, "导出备份失败："+err.Error())
+		return
+	}
+
+	userID, username, _ := currentIdentity(c)
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "BACKUP_EXPORT", "system", "backup", "导出系统配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	filename := fmt.Sprintf("wmam-backup-%s.wmam", time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, "application/octet-stream", data)
+}
+
+func localImportBackupHandler(c *gin.Context) {
+	backupPassword := c.PostForm("backupPassword")
+	adminPassword := c.PostForm("adminPassword")
+	if !requireAdminPassword(c, adminPassword) {
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		utils.Error(c, 400, "请选择备份文件")
+		return
+	}
+	opened, err := file.Open()
+	if err != nil {
+		utils.Error(c, 400, "读取备份文件失败")
+		return
+	}
+	defer opened.Close()
+
+	data, err := io.ReadAll(opened)
+	if err != nil {
+		utils.Error(c, 400, "读取备份文件失败")
+		return
+	}
+
+	importedFieldKey, err := storage.ImportEncryptedBackup(systemDB, data, backupPassword)
+	if err != nil {
+		utils.Error(c, 400, "导入备份失败："+err.Error())
+		return
+	}
+	fieldKey = importedFieldKey
+	if err := os.MkdirAll(appDataDir, 0750); err != nil {
+		utils.Error(c, 500, "保存字段密钥失败")
+		return
+	}
+	if err := os.WriteFile(filepath.Join(appDataDir, "secret.key"), fieldKey, 0600); err != nil {
+		utils.Error(c, 500, "保存字段密钥失败")
+		return
+	}
+
+	userID, username, _ := currentIdentity(c)
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "BACKUP_IMPORT", "system", "backup", "导入系统配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"message": "导入成功"})
 }
 
 func localListProgramsHandler(c *gin.Context) {
@@ -2849,6 +2925,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("读取配置失败: %v", err)
 	}
+	appDataDir = appCfg.Data.Dir
 
 	fieldKey, err = security.LoadOrCreateFieldKey(appCfg.Data.Dir)
 	if err != nil {
@@ -2936,6 +3013,8 @@ func main() {
 		admin.POST("/system/mysql/test", localTestMySQLConfigHandler)
 		admin.PUT("/system/mysql", localSaveMySQLConfigHandler)
 		admin.POST("/system/mysql/restore-last-good", localRestoreMySQLConfigHandler)
+		admin.POST("/system/backup/export", localExportBackupHandler)
+		admin.POST("/system/backup/import", localImportBackupHandler)
 		admin.GET("/config", localGetMySQLConfigHandler)
 		admin.POST("/test-connection", localTestMySQLConfigHandler)
 		admin.POST("/config", localSaveMySQLConfigHandler)

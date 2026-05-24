@@ -3,6 +3,7 @@ import { DatabaseZap, RotateCcw, Save } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { apiRequest } from "../lib/api";
+import { getStoredToken } from "../lib/auth";
 
 type MySQLConfig = {
   host: string;
@@ -29,6 +30,8 @@ const emptyConfig: MySQLConfig = {
 export function SystemPage() {
   const [config, setConfig] = useState<MySQLConfig>(emptyConfig);
   const [adminPassword, setAdminPassword] = useState("");
+  const [backupPassword, setBackupPassword] = useState("");
+  const [backupFile, setBackupFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -105,6 +108,66 @@ export function SystemPage() {
     }
   }
 
+  async function handleExport() {
+    setMessage("");
+    setError("");
+    try {
+      const response = await fetch("/api/system/backup/export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getStoredToken() ?? ""}`
+        },
+        body: JSON.stringify({ adminPassword, backupPassword })
+      });
+      if (!response.ok) {
+        throw new Error("导出失败");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `wmam-backup-${Date.now()}.wmam`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setMessage("备份已导出");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败");
+    }
+  }
+
+  async function handleImport() {
+    if (!backupFile) {
+      setError("请选择备份文件");
+      return;
+    }
+    if (!window.confirm("导入会覆盖当前本地系统配置，确认继续？")) {
+      return;
+    }
+    setMessage("");
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("file", backupFile);
+      form.set("backupPassword", backupPassword);
+      form.set("adminPassword", adminPassword);
+      const response = await fetch("/api/system/backup/import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${getStoredToken() ?? ""}`
+        },
+        body: form
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.code !== 0) {
+        throw new Error(payload.message || "导入失败");
+      }
+      setMessage("备份已导入，请重新登录");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导入失败");
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -175,7 +238,25 @@ export function SystemPage() {
 
       <Card>
         <CardTitle>系统备份</CardTitle>
-        <p className="mt-3 text-sm text-muted-foreground">加密导出和导入覆盖会在后续备份阶段接入。</p>
+        <p className="mt-3 text-sm text-muted-foreground">导出文件会整体加密；导入会覆盖当前本地系统配置。</p>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <input
+            className="field"
+            type="password"
+            placeholder="备份文件密码"
+            value={backupPassword}
+            onChange={(event) => setBackupPassword(event.target.value)}
+          />
+          <input className="field" type="file" accept=".wmam" onChange={(event) => setBackupFile(event.target.files?.[0] ?? null)} />
+          <div className="col-span-2 flex justify-end gap-2">
+            <Button type="button" variant="outline" disabled={!backupPassword} onClick={handleExport}>
+              导出系统配置
+            </Button>
+            <Button type="button" variant="warning" disabled={!backupPassword || !backupFile} onClick={handleImport}>
+              导入并覆盖
+            </Button>
+          </div>
+        </div>
       </Card>
     </div>
   );
