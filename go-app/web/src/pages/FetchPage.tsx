@@ -107,6 +107,16 @@ export function FetchPage() {
     void loadState();
   }, []);
 
+  useEffect(() => {
+    if (job?.status !== "running") {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void loadState();
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [job?.status]);
+
   const rows = useMemo(() => {
     const byProgram = new Map<string, Record<string, string>>();
     for (const step of steps) {

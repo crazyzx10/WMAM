@@ -230,6 +230,106 @@ ORDER BY id ASC
 	return steps, rows.Err()
 }
 
+func MarkFetchJobStepRunning(db *sql.DB, stepID int64, programID int64, programName, stepType string) error {
+	_, err := db.Exec(`
+UPDATE fetch_job_steps
+SET status = 'running',
+    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`, stepID)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`
+UPDATE fetch_jobs
+SET current_program_id = ?,
+    current_program_name = ?,
+    current_step = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = (SELECT job_id FROM fetch_job_steps WHERE id = ?)
+`, programID, programName, stepType, stepID)
+	return err
+}
+
+func MarkFetchJobStepFinished(db *sql.DB, jobID int64, stepID int64, status string, recordCount int, errorMessage string) error {
+	if status != string(jobstate.StepSuccess) && status != string(jobstate.StepFailed) && status != string(jobstate.StepSkipped) {
+		return errors.New("invalid finished step status")
+	}
+	_, err := db.Exec(`
+UPDATE fetch_job_steps
+SET status = ?,
+    finished_at = CURRENT_TIMESTAMP,
+    record_count = ?,
+    error_message = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`, status, recordCount, errorMessage, stepID)
+	if err != nil {
+		return err
+	}
+	return RefreshFetchJobProgress(db, jobID)
+}
+
+func RefreshFetchJobProgress(db *sql.DB, jobID int64) error {
+	var total, completed, failed int
+	if err := db.QueryRow("SELECT COUNT(*) FROM fetch_job_steps WHERE job_id = ?", jobID).Scan(&total); err != nil {
+		return err
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM fetch_job_steps WHERE job_id = ? AND status = 'success'", jobID).Scan(&completed); err != nil {
+		return err
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM fetch_job_steps WHERE job_id = ? AND status = 'failed'", jobID).Scan(&failed); err != nil {
+		return err
+	}
+
+	percent := 0
+	if total > 0 {
+		percent = ((completed + failed) * 100) / total
+	}
+
+	_, err := db.Exec(`
+UPDATE fetch_jobs
+SET total_steps = ?,
+    completed_steps = ?,
+    failed_steps = ?,
+    progress_percent = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`, total, completed, failed, percent, jobID)
+	return err
+}
+
+func SetFetchJobTerminal(db *sql.DB, jobID int64, status string, errorSummary string) (*FetchJob, error) {
+	if status != string(jobstate.JobCompleted) && status != string(jobstate.JobFailed) && status != string(jobstate.JobEnded) && status != string(jobstate.JobInterrupted) {
+		return nil, errors.New("invalid terminal job status")
+	}
+	if err := RefreshFetchJobProgress(db, jobID); err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(`
+UPDATE fetch_jobs
+SET status = ?,
+    error_summary = ?,
+    finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`, status, errorSummary, jobID); err != nil {
+		return nil, err
+	}
+	_ = ReleaseFetchJobLock(db, jobID)
+	return GetFetchJobByID(db, jobID)
+}
+
+func IsFetchJobRunning(db *sql.DB, jobID int64) (bool, error) {
+	var status string
+	err := db.QueryRow("SELECT status FROM fetch_jobs WHERE id = ?", jobID).Scan(&status)
+	if err != nil {
+		return false, err
+	}
+	return status == string(jobstate.JobRunning), nil
+}
+
 func InterruptFetchJob(db *sql.DB, jobID int64) (*FetchJob, error) {
 	job, err := GetFetchJobByID(db, jobID)
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"go-app/internal/appconfig"
+	jobstate "go-app/internal/jobs"
 	"go-app/internal/security"
 	"go-app/internal/storage"
 	"go-app/middleware"
@@ -1072,6 +1073,162 @@ func currentIdentity(c *gin.Context) (int64, string, string) {
 	return id, name, roleName
 }
 
+func redactRuntimeError(err error, secrets ...string) string {
+	if err == nil {
+		return ""
+	}
+	message := err.Error()
+	for _, secret := range secrets {
+		if secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return message
+}
+
+func runFetchJob(jobID int64, operatorID int64, operatorName string) {
+	failures := make([]string, 0)
+
+	mysqlCfg, err := storage.GetMySQLConfig(systemDB, fieldKey, true)
+	if err != nil || mysqlCfg.Host == "" {
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), "MySQL 配置不可用")
+		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "MySQL 配置不可用", "failed", "", "")
+		return
+	}
+
+	database, err := getDBConnection(Config{
+		Database: DatabaseConfig{
+			Host:     mysqlCfg.Host,
+			Port:     mysqlCfg.Port,
+			User:     mysqlCfg.Username,
+			Password: mysqlCfg.Password,
+			Database: mysqlCfg.Database,
+		},
+	})
+	if err != nil {
+		message := redactRuntimeError(err, mysqlCfg.Password)
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), message)
+		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "连接 MySQL 失败", "failed", "", "")
+		return
+	}
+	defer database.Close()
+
+	if err := database.Ping(); err != nil {
+		message := redactRuntimeError(err, mysqlCfg.Password)
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), message)
+		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "MySQL 连接测试失败", "failed", "", "")
+		return
+	}
+	if err := initDatabase(database); err != nil {
+		message := redactRuntimeError(err, mysqlCfg.Password)
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), message)
+		_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), "初始化 MySQL 表失败", "failed", "", "")
+		return
+	}
+
+	programs, err := storage.ListEnabledMiniProgramsWithSecret(systemDB, fieldKey)
+	if err != nil {
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), "读取小程序配置失败")
+		return
+	}
+	programByID := make(map[int64]storage.MiniProgram, len(programs))
+	for _, program := range programs {
+		programByID[program.ID] = program
+	}
+
+	steps, err := storage.ListFetchJobSteps(systemDB, jobID)
+	if err != nil {
+		_, _ = storage.SetFetchJobTerminal(systemDB, jobID, string(jobstate.JobFailed), "读取任务步骤失败")
+		return
+	}
+
+	apiBase := "https://api.weixin.qq.com/publisher/stat"
+	startDate := "2025-07-01"
+	endDate := time.Now().Format("2006-01-02")
+	logChan := make(chan string, 100)
+	defer close(logChan)
+	go func() {
+		for range logChan {
+		}
+	}()
+
+	for _, step := range steps {
+		if step.Status == string(jobstate.StepSuccess) {
+			continue
+		}
+		stillRunning, err := storage.IsFetchJobRunning(systemDB, jobID)
+		if err != nil || !stillRunning {
+			return
+		}
+
+		program, ok := programByID[step.ProgramID]
+		if !ok {
+			message := "小程序已禁用或不存在"
+			_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepFailed), 0, message)
+			failures = append(failures, fmt.Sprintf("%s: %s", step.ProgramName, message))
+			continue
+		}
+
+		if err := storage.MarkFetchJobStepRunning(systemDB, step.ID, program.ID, program.Name, step.StepType); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: 更新步骤状态失败", step.ProgramName))
+			continue
+		}
+
+		token, err := getTokenWithCache(program.AppID, program.AppSecret)
+		if err != nil {
+			message := redactRuntimeError(err, program.AppSecret)
+			_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepFailed), 0, message)
+			failures = append(failures, fmt.Sprintf("%s/%s: %s", program.Name, step.StepType, message))
+			continue
+		}
+
+		recordCount := 0
+		switch step.StepType {
+		case string(jobstate.StepAdunitList):
+			err = syncAdUnitList(database, program.Name, program.AppID, program.AppSecret, token, apiBase, logChan)
+		case string(jobstate.StepSummary):
+			lastDate := getLatestDataDate(database, "publisher_adpos_general", "鏃ユ湡", program.AppID, startDate)
+			recordCount, err = syncSummaryData(context.Background(), database, program.Name, program.AppID, program.AppSecret, token, apiBase, lastDate, endDate, logChan)
+		case string(jobstate.StepDetail):
+			lastDate := getLatestDataDate(database, "publisher_adunit_general", "鏃ユ湡", program.AppID, startDate)
+			recordCount, err = syncDetailData(context.Background(), database, program.Name, program.AppID, program.AppSecret, token, apiBase, lastDate, endDate, logChan)
+		case string(jobstate.StepSettlement):
+			err = syncSettlementData(database, program.Name, program.AppID, program.AppSecret, token, apiBase, logChan)
+			if err == nil {
+				recordCount = 1
+			}
+		default:
+			err = fmt.Errorf("unknown step type %s", step.StepType)
+		}
+
+		if err != nil {
+			message := redactRuntimeError(err, mysqlCfg.Password, program.AppSecret)
+			_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepFailed), recordCount, message)
+			failures = append(failures, fmt.Sprintf("%s/%s: %s", program.Name, step.StepType, message))
+			continue
+		}
+		_ = storage.MarkFetchJobStepFinished(systemDB, jobID, step.ID, string(jobstate.StepSuccess), recordCount, "")
+	}
+
+	stillRunning, err := storage.IsFetchJobRunning(systemDB, jobID)
+	if err != nil || !stillRunning {
+		return
+	}
+
+	finalStatus := string(jobstate.JobCompleted)
+	action := "JOB_COMPLETE"
+	result := "success"
+	errorSummary := ""
+	if len(failures) > 0 {
+		finalStatus = string(jobstate.JobFailed)
+		action = "JOB_FAILED"
+		result = "failed"
+		errorSummary = strings.Join(failures, "; ")
+	}
+	_, _ = storage.SetFetchJobTerminal(systemDB, jobID, finalStatus, errorSummary)
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, action, "job", fmt.Sprintf("%d", jobID), storage.JobStatusLabel(finalStatus), result, "", "")
+}
+
 func localCurrentJobHandler(c *gin.Context) {
 	userID, _, role := currentIdentity(c)
 	job, err := storage.GetLatestFetchJob(systemDB)
@@ -1120,6 +1277,7 @@ func localStartJobHandler(c *gin.Context) {
 	}
 
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_START", "job", fmt.Sprintf("%d", job.ID), "开始拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	go runFetchJob(job.ID, userID, username)
 	utils.Success(c, gin.H{"job": job})
 }
 
@@ -1172,6 +1330,7 @@ func localResumeJobHandler(c *gin.Context) {
 		return
 	}
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "JOB_RESUME", "job", fmt.Sprintf("%d", job.ID), "继续拉取任务", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	go runFetchJob(job.ID, userID, username)
 	utils.Success(c, gin.H{"job": job})
 }
 
