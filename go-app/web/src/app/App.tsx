@@ -1,8 +1,11 @@
+import { useState } from "react";
 import {
   Database,
   FileClock,
   LogOut,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Smartphone,
   Sun,
@@ -12,6 +15,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "reac
 import { apiRequest } from "../lib/api";
 import { clearAuth, getStoredToken, getStoredUser } from "../lib/auth";
 import { Button } from "../components/ui/Button";
+import { useTheme } from "../lib/theme";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
 import { FetchPage } from "../pages/FetchPage";
 import { LogsPage } from "../pages/LogsPage";
@@ -28,6 +32,8 @@ const navItems = [
   { to: "/app/logs", label: "操作日志", icon: FileClock },
   { to: "/app/users", label: "用户管理", icon: Users, adminOnly: true }
 ];
+
+const sidebarKey = "wmam.ui.sidebarCollapsed";
 
 function ProtectedRoute() {
   const location = useLocation();
@@ -53,7 +59,17 @@ function ProtectedChangePasswordRoute() {
 function AppLayout() {
   const navigate = useNavigate();
   const user = getStoredUser();
+  const { isDark, toggleTheme } = useTheme();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem(sidebarKey) === "1");
   const visibleNav = navItems.filter((item) => !item.adminOnly || user?.role === "admin");
+
+  function toggleSidebar() {
+    setIsSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem(sidebarKey, next ? "1" : "0");
+      return next;
+    });
+  }
 
   async function handleLogout() {
     try {
@@ -66,12 +82,22 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-64 flex-col border-r border-border bg-sidebar">
-        <div className="flex h-16 items-center gap-3 border-b border-border px-5">
+      <aside
+        className={[
+          "fixed inset-y-0 left-0 z-20 flex flex-col border-r border-border bg-sidebar transition-[width]",
+          isSidebarCollapsed ? "w-20" : "w-64"
+        ].join(" ")}
+      >
+        <div
+          className={[
+            "flex h-16 items-center gap-3 border-b border-border px-5",
+            isSidebarCollapsed ? "justify-center px-3" : ""
+          ].join(" ")}
+        >
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-sm font-semibold text-background">
             W
           </div>
-          <div>
+          <div className={isSidebarCollapsed ? "sr-only" : ""}>
             <div className="font-semibold tracking-tight">WMAM</div>
             <div className="text-xs text-muted-foreground">{user?.username ?? "未登录"}</div>
           </div>
@@ -84,20 +110,35 @@ function AppLayout() {
               className={({ isActive }) =>
                 [
                   "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition",
+                  isSidebarCollapsed ? "justify-center px-0" : "",
                   isActive
                     ? "bg-muted font-medium text-foreground"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 ].join(" ")
               }
+              title={isSidebarCollapsed ? item.label : undefined}
             >
               <item.icon className="h-4 w-4" />
-              {item.label}
+              <span className={isSidebarCollapsed ? "sr-only" : ""}>{item.label}</span>
             </NavLink>
           ))}
         </nav>
+        <div className="border-t border-border p-3">
+          <Button
+            className="w-full"
+            variant="ghost"
+            size={isSidebarCollapsed ? "icon" : "default"}
+            onClick={toggleSidebar}
+            title={isSidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+            aria-label={isSidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            <span className={isSidebarCollapsed ? "sr-only" : ""}>{isSidebarCollapsed ? "展开" : "折叠"}</span>
+          </Button>
+        </div>
       </aside>
 
-      <div className="pl-64">
+      <div className={["transition-[padding-left]", isSidebarCollapsed ? "pl-20" : "pl-64"].join(" ")}>
         <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
           <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-6">
             <div>
@@ -105,9 +146,14 @@ function AppLayout() {
               <h1 className="text-lg font-semibold">多人控制台</h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" aria-label="切换主题">
-                <Sun className="h-4 w-4 dark:hidden" />
-                <Moon className="hidden h-4 w-4 dark:block" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                aria-label={isDark ? "切换浅色模式" : "切换暗色模式"}
+                title={isDark ? "切换浅色模式" : "切换暗色模式"}
+              >
+                {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </Button>
               <Button variant="outline" onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />

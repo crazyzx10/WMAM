@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { apiRequest } from "../lib/api";
 import { type CurrentUser, setAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 
 type LoginResult = {
   token: string;
@@ -14,6 +15,7 @@ type LoginResult = {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [rememberPassword, setRememberPassword] = useState(true);
@@ -41,9 +43,16 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
-      <Button className="absolute right-6 top-6" variant="ghost" size="icon" aria-label="切换主题">
-        <Sun className="h-4 w-4 dark:hidden" />
-        <Moon className="hidden h-4 w-4 dark:block" />
+      <Button
+        className="absolute right-6 top-6"
+        variant="ghost"
+        size="icon"
+        type="button"
+        onClick={toggleTheme}
+        aria-label={isDark ? "切换浅色模式" : "切换暗色模式"}
+        title={isDark ? "切换浅色模式" : "切换暗色模式"}
+      >
+        {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
       </Button>
 
       <Card className="w-full max-w-[420px] p-8">
