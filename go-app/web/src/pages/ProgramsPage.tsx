@@ -33,7 +33,6 @@ export function ProgramsPage() {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [enabled, setEnabled] = useState(true);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -72,7 +71,6 @@ export function ProgramsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
     setError("");
     try {
       if (editingId) {
@@ -80,14 +78,12 @@ export function ProgramsPage() {
           method: "PUT",
           body: JSON.stringify({ name, appSecret, enabled })
         });
-        setMessage("小程序已更新");
         toast({ title: "小程序已更新", variant: "success" });
       } else {
         await apiRequest("/api/programs", {
           method: "POST",
           body: JSON.stringify({ name, appId, appSecret, enabled })
         });
-        setMessage("小程序已创建");
         toast({ title: "小程序已创建", variant: "success" });
       }
       resetForm();
@@ -103,14 +99,12 @@ export function ProgramsPage() {
     if (program.enabled && !window.confirm(`确认禁用小程序 ${program.name}？`)) {
       return;
     }
-    setMessage("");
     setError("");
     try {
       await apiRequest(`/api/programs/${program.id}/status`, {
         method: "POST",
         body: JSON.stringify({ enabled: !program.enabled })
       });
-      setMessage(program.enabled ? "小程序已禁用" : "小程序已启用");
       toast({ title: program.enabled ? "小程序已禁用" : "小程序已启用", variant: "success" });
       await loadPrograms();
     } catch (err) {
@@ -124,11 +118,9 @@ export function ProgramsPage() {
     if (!window.confirm(`确认删除小程序 ${program.name}？`)) {
       return;
     }
-    setMessage("");
     setError("");
     try {
       await apiRequest(`/api/programs/${program.id}`, { method: "DELETE" });
-      setMessage("小程序已删除");
       toast({ title: "小程序已删除", variant: "success" });
       await loadPrograms();
     } catch (err) {
@@ -184,7 +176,7 @@ export function ProgramsPage() {
         </form>
       </Card>
 
-      <StatusMessage message={message} error={error} />
+      <StatusMessage error={error} />
 
       <Card>
         <CardTitle>小程序列表</CardTitle>

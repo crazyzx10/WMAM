@@ -45,7 +45,6 @@ export function SystemPage() {
   const [backupPassword, setBackupPassword] = useState("");
   const [backupFile, setBackupFile] = useState<File | null>(null);
   const [recoveryCode, setRecoveryCode] = useState("");
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -72,14 +71,12 @@ export function SystemPage() {
   }
 
   async function handleTest() {
-    setMessage("");
     setError("");
     try {
       await apiRequest("/api/system/mysql/test", {
         method: "POST",
         body: JSON.stringify(config)
       });
-      setMessage("连接成功");
       toast({ title: "MySQL 连接成功", variant: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "连接失败";
@@ -90,7 +87,6 @@ export function SystemPage() {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
     setError("");
     try {
       await apiRequest("/api/system/mysql", {
@@ -99,7 +95,6 @@ export function SystemPage() {
       });
       setConfig((current) => ({ ...current, password: "", passwordSet: true }));
       setAdminPassword("");
-      setMessage("数据库配置已保存");
       toast({ title: "数据库配置已保存", variant: "success" });
       await loadConfig();
     } catch (err) {
@@ -113,7 +108,6 @@ export function SystemPage() {
     if (!window.confirm("确认恢复上一份可用 MySQL 配置？")) {
       return;
     }
-    setMessage("");
     setError("");
     try {
       await apiRequest("/api/system/mysql/restore-last-good", {
@@ -121,7 +115,6 @@ export function SystemPage() {
         body: JSON.stringify({ adminPassword })
       });
       setAdminPassword("");
-      setMessage("已恢复上一份可用配置");
       toast({ title: "已恢复上一份可用配置", variant: "success" });
       await loadConfig();
     } catch (err) {
@@ -132,7 +125,6 @@ export function SystemPage() {
   }
 
   async function handleExport() {
-    setMessage("");
     setError("");
     try {
       const response = await fetch("/api/system/backup/export", {
@@ -160,7 +152,6 @@ export function SystemPage() {
       link.download = `wmam-backup-${Date.now()}.wmam`;
       link.click();
       URL.revokeObjectURL(url);
-      setMessage("备份已导出");
       toast({ title: "备份已导出", variant: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "导出失败";
@@ -178,7 +169,6 @@ export function SystemPage() {
     if (!window.confirm("导入会覆盖当前本地系统配置，确认继续？")) {
       return;
     }
-    setMessage("");
     setError("");
     try {
       const form = new FormData();
@@ -194,7 +184,6 @@ export function SystemPage() {
       if (!response.ok || payload.code !== 0) {
         throw new Error(payload.message || "导入失败");
       }
-      setMessage("备份已导入，请重新登录");
       toast({ title: "备份已导入，请重新登录", variant: "success" });
       clearAuth();
       navigate("/login", { replace: true });
@@ -209,7 +198,6 @@ export function SystemPage() {
     if (!window.confirm("生成新恢复码后，旧恢复码会立即失效，确认继续？")) {
       return;
     }
-    setMessage("");
     setError("");
     setRecoveryCode("");
     try {
@@ -218,7 +206,6 @@ export function SystemPage() {
         body: JSON.stringify({ adminPassword })
       });
       setRecoveryCode(data.recoveryCode);
-      setMessage("新恢复码已生成");
       toast({ title: "新恢复码已生成", variant: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "生成恢复码失败";
@@ -256,7 +243,7 @@ export function SystemPage() {
     <div className="space-y-5">
       <PageHeader title="系统配置" description="配置广告数据 MySQL 连接和系统备份。WMAM 启动时不会自动连接 MySQL。" />
 
-      <StatusMessage message={message} error={error} />
+      <StatusMessage error={error} />
 
       <Card>
         <div className="flex items-center justify-between gap-3">

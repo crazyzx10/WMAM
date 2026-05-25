@@ -30,7 +30,6 @@ export function UsersPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [resetPasswordById, setResetPasswordById] = useState<Record<number, string>>({});
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -53,7 +52,6 @@ export function UsersPage() {
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
     setError("");
     try {
       await apiRequest("/api/users", {
@@ -62,7 +60,6 @@ export function UsersPage() {
       });
       setUsername("");
       setPassword("");
-      setMessage("用户已创建");
       toast({ title: "用户已创建", variant: "success" });
       await loadUsers();
     } catch (err) {
@@ -77,14 +74,12 @@ export function UsersPage() {
     if (nextStatus === "disabled" && !window.confirm(`确认禁用用户 ${user.username}？`)) {
       return;
     }
-    setMessage("");
     setError("");
     try {
       await apiRequest(`/api/users/${user.id}`, {
         method: "PUT",
         body: JSON.stringify({ username: user.username, status: nextStatus })
       });
-      setMessage(nextStatus === "active" ? "用户已启用" : "用户已禁用");
       toast({ title: nextStatus === "active" ? "用户已启用" : "用户已禁用", variant: "success" });
       await loadUsers();
     } catch (err) {
@@ -96,7 +91,6 @@ export function UsersPage() {
 
   async function handleResetPassword(user: UserRow) {
     const nextPassword = resetPasswordById[user.id] ?? "";
-    setMessage("");
     setError("");
     try {
       await apiRequest(`/api/users/${user.id}/reset-password`, {
@@ -104,7 +98,6 @@ export function UsersPage() {
         body: JSON.stringify({ password: nextPassword })
       });
       setResetPasswordById((current) => ({ ...current, [user.id]: "" }));
-      setMessage("密码已重置");
       toast({ title: "密码已重置", variant: "success" });
       await loadUsers();
     } catch (err) {
@@ -118,11 +111,9 @@ export function UsersPage() {
     if (!window.confirm(`确认删除用户 ${user.username}？`)) {
       return;
     }
-    setMessage("");
     setError("");
     try {
       await apiRequest(`/api/users/${user.id}`, { method: "DELETE" });
-      setMessage("用户已删除");
       toast({ title: "用户已删除", variant: "success" });
       await loadUsers();
     } catch (err) {
@@ -168,7 +159,7 @@ export function UsersPage() {
         </form>
       </Card>
 
-      <StatusMessage message={message} error={error} />
+      <StatusMessage error={error} />
 
       <Card>
         <CardTitle>用户列表</CardTitle>

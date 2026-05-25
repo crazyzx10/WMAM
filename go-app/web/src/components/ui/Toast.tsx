@@ -14,6 +14,7 @@ type ToastInput = {
 type ToastItem = ToastInput & {
   id: string;
   variant: ToastVariant;
+  exiting?: boolean;
 };
 
 type ToastContextValue = {
@@ -21,6 +22,7 @@ type ToastContextValue = {
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
+const toastExitMs = 240;
 
 function createToastId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -43,7 +45,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   function dismiss(id: string) {
-    setToasts((current) => current.filter((item) => item.id !== id));
+    setToasts((current) => current.map((item) => (item.id === id ? { ...item, exiting: true } : item)));
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== id));
+    }, toastExitMs);
   }
 
   const value = useMemo<ToastContextValue>(
@@ -71,7 +76,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((item) => (
           <div
             key={item.id}
-            className="pointer-events-auto flex gap-3 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-lg"
+            className={[
+              "pointer-events-auto flex gap-3 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-lg",
+              item.exiting ? "animate-toast-out" : "animate-toast-in"
+            ].join(" ")}
           >
             {toastIcon(item.variant)}
             <div className="min-w-0 flex-1">
