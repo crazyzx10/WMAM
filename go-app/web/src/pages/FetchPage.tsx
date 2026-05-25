@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pause, Play, Square, StepForward } from "lucide-react";
+import { Badge, toneForStatus } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 import { getStoredToken } from "../lib/auth";
@@ -289,11 +291,17 @@ export function FetchPage() {
           <div>
             <CardTitle>当前任务</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              {job
-                ? `${statusLabels[job.status]} · 发起人 ${job.startedByUsername} · ${job.currentProgramName || "等待执行"} / ${
-                    stepLabels[job.currentStep as JobStep["stepType"]] ?? "等待步骤"
-                  }`
-                : "暂无任务"}
+              {job ? (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  <Badge tone={toneForStatus(job.status)}>{statusLabels[job.status]}</Badge>
+                  <span>
+                    发起人 {job.startedByUsername} · {job.currentProgramName || "等待执行"} /{" "}
+                    {stepLabels[job.currentStep as JobStep["stepType"]] ?? "等待步骤"}
+                  </span>
+                </span>
+              ) : (
+                "暂无任务"
+              )}
             </p>
           </div>
           <div className="text-sm font-medium">{progress}%</div>
@@ -340,7 +348,7 @@ export function FetchPage() {
             </thead>
             <tbody>
               {rows.map((program) => (
-                <tr key={program.name} className="border-t border-border">
+                <tr key={program.name} className="table-row">
                   <td className="px-4 py-3 font-medium">{program.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{program.status}</td>
                   <td className="px-4 py-3">{program.adunit}</td>
@@ -352,8 +360,8 @@ export function FetchPage() {
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-muted-foreground" colSpan={7}>
-                    暂无已启用小程序
+                  <td colSpan={7}>
+                    <EmptyState title="暂无已启用小程序" description="管理员启用小程序后，这里会显示每个小程序的拉取步骤状态。" />
                   </td>
                 </tr>
               ) : null}

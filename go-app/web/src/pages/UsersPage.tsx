@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
@@ -186,11 +188,17 @@ export function UsersPage() {
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="border-t border-border">
+                <tr key={user.id} className="table-row">
                   <td className="px-4 py-3 font-medium">{user.username}</td>
-                  <td className="px-4 py-3">{user.role === "admin" ? "管理员" : "普通用户"}</td>
-                  <td className="px-4 py-3">{user.status === "active" ? "启用" : "禁用"}</td>
-                  <td className="px-4 py-3">{user.must_change_password ? "需要" : "不需要"}</td>
+                  <td className="px-4 py-3">
+                    <Badge tone={user.role === "admin" ? "neutral" : "warning"}>{user.role === "admin" ? "管理员" : "普通用户"}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={user.status === "active" ? "success" : "danger"}>{user.status === "active" ? "启用" : "禁用"}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={user.must_change_password ? "warning" : "success"}>{user.must_change_password ? "需要" : "不需要"}</Badge>
+                  </td>
                   <td className="px-4 py-3">
                     {user.role === "admin" ? (
                       <span className="text-muted-foreground">唯一管理员受保护</span>
@@ -230,8 +238,8 @@ export function UsersPage() {
               ))}
               {users.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-muted-foreground" colSpan={5}>
-                    暂无用户
+                  <td colSpan={5}>
+                    <EmptyState title="暂无用户" description="创建普通用户后，他们可以登录并执行自己的拉取任务。" />
                   </td>
                 </tr>
               ) : null}

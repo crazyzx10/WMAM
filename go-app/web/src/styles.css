@@ -79,3 +79,18 @@ body {
 .field:focus {
   box-shadow: 0 0 0 2px rgb(var(--ring) / 0.18);
 }
+
+.field:disabled {
+  cursor: not-allowed;
+  background: rgb(var(--muted));
+  color: rgb(var(--muted-foreground));
+}
+
+.table-row {
+  border-top: 1px solid rgb(var(--border));
+  transition: background-color 150ms ease;
+}
+
+.table-row:hover {
+  background: rgb(var(--muted) / 0.38);
+}

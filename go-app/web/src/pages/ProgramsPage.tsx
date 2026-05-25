@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
+import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
@@ -202,11 +204,15 @@ export function ProgramsPage() {
             </thead>
             <tbody>
               {programs.map((program) => (
-                <tr key={program.id} className="border-t border-border">
+                <tr key={program.id} className="table-row">
                   <td className="px-4 py-3 font-medium">{program.name}</td>
                   <td className="px-4 py-3">{program.appIdMasked || program.appId}</td>
-                  <td className="px-4 py-3">{program.appSecretSet ? "已设置" : "未设置"}</td>
-                  <td className="px-4 py-3">{program.enabled ? "启用" : "禁用"}</td>
+                  <td className="px-4 py-3">
+                    <Badge tone={program.appSecretSet ? "success" : "warning"}>{program.appSecretSet ? "已设置" : "未设置"}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={program.enabled ? "success" : "neutral"}>{program.enabled ? "启用" : "禁用"}</Badge>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => startEdit(program)}>
@@ -225,8 +231,8 @@ export function ProgramsPage() {
               ))}
               {programs.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-center text-muted-foreground" colSpan={5}>
-                    暂无小程序
+                  <td colSpan={5}>
+                    <EmptyState title="暂无小程序" description="添加并启用小程序后，执行拉取页会按这些配置运行任务。" />
                   </td>
                 </tr>
               ) : null}

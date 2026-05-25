@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Eye, RefreshCw, X } from "lucide-react";
+import { Badge, toneForStatus } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
 import { apiRequest } from "../lib/api";
 
 type Job = {
@@ -167,9 +169,11 @@ export function LogsPage() {
                 </thead>
                 <tbody>
                   {jobs.map((job) => (
-                    <tr key={job.id} className="border-t border-border">
+                    <tr key={job.id} className="table-row">
                       <td className="px-4 py-3 font-medium">#{job.id}</td>
-                      <td className="px-4 py-3">{labelOf(jobStatusLabels, job.status)}</td>
+                      <td className="px-4 py-3">
+                        <Badge tone={toneForStatus(job.status)}>{labelOf(jobStatusLabels, job.status)}</Badge>
+                      </td>
                       <td className="px-4 py-3">{job.startedByUsername}</td>
                       <td className="px-4 py-3">
                         {job.completedSteps}/{job.totalSteps}，失败 {job.failedSteps}
@@ -185,8 +189,8 @@ export function LogsPage() {
                   ))}
                   {jobs.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-8 text-center text-muted-foreground" colSpan={6}>
-                        暂无任务记录
+                      <td colSpan={6}>
+                        <EmptyState title="暂无任务记录" description="执行拉取后，这里会显示任务摘要和步骤详情入口。" />
                       </td>
                     </tr>
                   ) : null}
@@ -210,18 +214,22 @@ export function LogsPage() {
                 </thead>
                 <tbody>
                   {logs.map((log) => (
-                    <tr key={log.id} className="border-t border-border">
+                    <tr key={log.id} className="table-row">
                       <td className="px-4 py-3 text-muted-foreground">{log.created_at ?? log.createdAt}</td>
                       <td className="px-4 py-3">{log.username}</td>
                       <td className="px-4 py-3">{log.action}</td>
                       <td className="px-4 py-3">{log.description}</td>
-                      <td className="px-4 py-3">{log.result}</td>
+                      <td className="px-4 py-3">
+                        <Badge tone={log.result === "success" ? "success" : "danger"}>
+                          {log.result === "success" ? "成功" : "失败"}
+                        </Badge>
+                      </td>
                     </tr>
                   ))}
                   {logs.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-8 text-center text-muted-foreground" colSpan={5}>
-                        暂无审计日志
+                      <td colSpan={5}>
+                        <EmptyState title="暂无审计日志" description="登录、配置、任务和用户操作会记录在这里。" />
                       </td>
                     </tr>
                   ) : null}
@@ -244,7 +252,14 @@ export function LogsPage() {
                     : "正在加载任务详情"}
                 </p>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => { setDetail(null); setDetailError(""); }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setDetail(null);
+                  setDetailError("");
+                }}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -294,13 +309,15 @@ export function LogsPage() {
                       </thead>
                       <tbody>
                         {detail.steps.map((step) => (
-                          <tr key={step.id} className="border-t border-border">
+                          <tr key={step.id} className="table-row">
                             <td className="px-4 py-3">
                               <div className="font-medium">{step.programName}</div>
                               <div className="text-xs text-muted-foreground">{step.appIdMasked}</div>
                             </td>
                             <td className="px-4 py-3">{labelOf(stepLabels, step.stepType)}</td>
-                            <td className="px-4 py-3">{labelOf(stepStatusLabels, step.status)}</td>
+                            <td className="px-4 py-3">
+                              <Badge tone={toneForStatus(step.status)}>{labelOf(stepStatusLabels, step.status)}</Badge>
+                            </td>
                             <td className="px-4 py-3">{step.recordCount}</td>
                             <td className="max-w-[260px] px-4 py-3 text-danger">{step.errorMessage || "-"}</td>
                           </tr>
