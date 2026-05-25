@@ -1,9 +1,11 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { DatabaseZap, RotateCcw, Save } from "lucide-react";
+import { Copy, DatabaseZap, Download, RotateCcw, Save, ShieldCheck } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
+import { clearAuth } from "../lib/auth";
 
 type MySQLConfig = {
   host: string;
@@ -16,6 +18,11 @@ type MySQLConfig = {
 
 type MySQLResponse = {
   mysql: MySQLConfig;
+  lastGoodAvailable: boolean;
+};
+
+type RecoveryCodeResponse = {
+  recoveryCode: string;
 };
 
 const emptyConfig: MySQLConfig = {
@@ -29,10 +36,13 @@ const emptyConfig: MySQLConfig = {
 
 export function SystemPage() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [config, setConfig] = useState<MySQLConfig>(emptyConfig);
+  const [lastGoodAvailable, setLastGoodAvailable] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
   const [backupPassword, setBackupPassword] = useState("");
   const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [recoveryCode, setRecoveryCode] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,6 +53,7 @@ export function SystemPage() {
     try {
       const data = await apiRequest<MySQLResponse>("/api/system/mysql");
       setConfig({ ...emptyConfig, ...data.mysql, password: "" });
+      setLastGoodAvailable(data.lastGoodAvailable);
     } catch (err) {
       setError(err instanceof Error ? err.message : "读取配置失败");
     } finally {
@@ -131,7 +142,14 @@ export function SystemPage() {
         body: JSON.stringify({ adminPassword, backupPassword })
       });
       if (!response.ok) {
-        throw new Error("导出失败");
+        let message = "导出失败";
+        try {
+          const payload = await response.json();
+          message = payload.message || message;
+        } catch {
+          // keep the generic message
+        }
+        throw new Error(message);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -176,11 +194,60 @@ export function SystemPage() {
       }
       setMessage("备份已导入，请重新登录");
       toast({ title: "备份已导入，请重新登录", variant: "success" });
+      clearAuth();
+      navigate("/login", { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "导入失败";
       setError(message);
       toast({ title: message, variant: "danger" });
     }
+  }
+
+  async function handleRotateRecoveryCode() {
+    if (!window.confirm("生成新恢复码后，旧恢复码会立即失效，确认继续？")) {
+      return;
+    }
+    setMessage("");
+    setError("");
+    setRecoveryCode("");
+    try {
+      const data = await apiRequest<RecoveryCodeResponse>("/api/system/recovery-code/rotate", {
+        method: "POST",
+        body: JSON.stringify({ adminPassword })
+      });
+      setRecoveryCode(data.recoveryCode);
+      setMessage("新恢复码已生成");
+      toast({ title: "新恢复码已生成", variant: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "生成恢复码失败";
+      setError(message);
+      toast({ title: message, variant: "danger" });
+    }
+  }
+
+  async function copyRecoveryCode() {
+    if (!recoveryCode) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(recoveryCode);
+      toast({ title: "恢复码已复制", variant: "success" });
+    } catch {
+      toast({ title: "复制失败，请手动选择恢复码", variant: "danger" });
+    }
+  }
+
+  function downloadRecoveryCode() {
+    if (!recoveryCode) {
+      return;
+    }
+    const blob = new Blob([`${recoveryCode}\n`], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `wmam-admin-recovery-${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -235,7 +302,7 @@ export function SystemPage() {
             onChange={(event) => setAdminPassword(event.target.value)}
           />
           <div className="col-span-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" disabled={!adminPassword} onClick={handleRestore}>
+            <Button type="button" variant="outline" disabled={!adminPassword || !lastGoodAvailable} onClick={handleRestore}>
               <RotateCcw className="h-4 w-4" />
               恢复配置
             </Button>
@@ -249,6 +316,36 @@ export function SystemPage() {
             </Button>
           </div>
         </form>
+      </Card>
+
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>管理员恢复码</CardTitle>
+            <p className="mt-2 text-sm text-muted-foreground">恢复码只在生成后显示一次。重新生成会让旧恢复码失效。</p>
+          </div>
+          <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" disabled={!adminPassword} onClick={handleRotateRecoveryCode}>
+            生成新恢复码
+          </Button>
+        </div>
+        {recoveryCode ? (
+          <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
+            <div className="break-all font-mono text-sm">{recoveryCode}</div>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={copyRecoveryCode}>
+                <Copy className="h-4 w-4" />
+                复制
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={downloadRecoveryCode}>
+                <Download className="h-4 w-4" />
+                下载
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <Card>

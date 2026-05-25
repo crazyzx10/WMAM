@@ -161,7 +161,9 @@ func ImportEncryptedBackup(db *sql.DB, data []byte, password string) ([]byte, er
 	if err := replaceTables(db, payload.Tables); err != nil {
 		return nil, err
 	}
-	_ = RevokeAllSessions(db)
+	if err := normalizeImportedRuntimeState(db); err != nil {
+		return nil, err
+	}
 	return fieldKey, nil
 }
 
@@ -223,6 +225,59 @@ func replaceTables(db *sql.DB, tables map[string][]map[string]any) error {
 				return err
 			}
 		}
+	}
+
+	return tx.Commit()
+}
+
+func normalizeImportedRuntimeState(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM sessions"); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`
+UPDATE fetch_job_steps
+SET status = 'failed',
+    finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+    error_message = CASE WHEN COALESCE(error_message, '') = '' THEN '备份恢复时任务仍在运行，已标记为失败' ELSE error_message END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE status = 'running'
+`); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`
+UPDATE fetch_jobs
+SET status = 'failed',
+    error_summary = CASE WHEN COALESCE(error_summary, '') = '' THEN '备份恢复时任务仍在运行，已标记为失败' ELSE error_summary END,
+    finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+    updated_at = CURRENT_TIMESTAMP
+WHERE status = 'running'
+`); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec("INSERT INTO fetch_lock (id) VALUES (1) ON CONFLICT(id) DO NOTHING"); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`
+UPDATE fetch_lock
+SET job_id = NULL,
+    locked_by_user_id = NULL,
+    locked_by_username = NULL,
+    locked_at = NULL,
+    heartbeat_at = NULL,
+    expires_at = NULL
+WHERE id = 1
+`); err != nil {
+		_ = tx.Rollback()
+		return err
 	}
 
 	return tx.Commit()

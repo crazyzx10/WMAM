@@ -166,6 +166,14 @@ func RestoreLastGoodMySQLConfig(db *sql.DB, fieldKey []byte) (MySQLConfig, error
 	return cfg, SaveMySQLConfig(db, fieldKey, cfg)
 }
 
+func HasLastGoodMySQLConfig(db *sql.DB) (bool, error) {
+	encrypted, ok, err := GetConfigValue(db, "mysql.last_good_config")
+	if err != nil {
+		return false, err
+	}
+	return ok && strings.TrimSpace(encrypted) != "", nil
+}
+
 func ListMiniPrograms(db *sql.DB, includeSecret bool, fieldKey []byte) ([]MiniProgram, error) {
 	rows, err := db.Query(`
 SELECT id, name, app_id, app_secret_encrypted, enabled, created_at, updated_at

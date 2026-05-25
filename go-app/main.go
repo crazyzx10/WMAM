@@ -986,7 +986,12 @@ func localGetMySQLConfigHandler(c *gin.Context) {
 		utils.Error(c, 500, "读取数据库配置失败")
 		return
 	}
-	utils.Success(c, gin.H{"mysql": cfg})
+	lastGoodAvailable, err := storage.HasLastGoodMySQLConfig(systemDB)
+	if err != nil {
+		utils.Error(c, 500, "读取恢复配置状态失败")
+		return
+	}
+	utils.Success(c, gin.H{"mysql": cfg, "lastGoodAvailable": lastGoodAvailable})
 }
 
 func localTestMySQLConfigHandler(c *gin.Context) {
@@ -1011,7 +1016,7 @@ func localTestMySQLConfigHandler(c *gin.Context) {
 
 	if err := testStoredMySQLConfig(req); err != nil {
 		_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_TEST", "system", "mysql", "测试 MySQL 连接失败", "failed", c.ClientIP(), c.GetHeader("User-Agent"))
-		utils.Error(c, 500, "连接失败："+err.Error())
+		utils.Error(c, 500, "连接失败："+redactRuntimeError(err, req.Password, current.Password))
 		return
 	}
 
@@ -1041,7 +1046,7 @@ func localSaveMySQLConfigHandler(c *gin.Context) {
 		next.Port = 3306
 	}
 	if err := testStoredMySQLConfig(next); err != nil {
-		utils.Error(c, 500, "保存前测试连接失败："+err.Error())
+		utils.Error(c, 500, "保存前测试连接失败："+redactRuntimeError(err, next.Password, current.Password))
 		return
 	}
 
@@ -1080,6 +1085,39 @@ func localRestoreMySQLConfigHandler(c *gin.Context) {
 	_ = storage.CreateAuditLog(systemDB, &id, name, "SYSTEM_MYSQL_RESTORE", "system", "mysql", "恢复上一份可用 MySQL 配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
 
 	utils.Success(c, nil)
+}
+
+func localRotateRecoveryCodeHandler(c *gin.Context) {
+	var req struct {
+		AdminPassword string `json:"adminPassword"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, 400, "参数错误")
+		return
+	}
+	if !requireAdminPassword(c, req.AdminPassword) {
+		return
+	}
+
+	nextRecoveryCode, err := security.NewRecoveryCode()
+	if err != nil {
+		utils.Error(c, 500, "生成恢复码失败")
+		return
+	}
+	nextRecoveryHash, err := utils.HashPassword(nextRecoveryCode)
+	if err != nil {
+		utils.Error(c, 500, "保存恢复码失败")
+		return
+	}
+	if err := storage.ReplaceAdminRecoveryHash(systemDB, nextRecoveryHash); err != nil {
+		utils.Error(c, 500, "保存恢复码失败")
+		return
+	}
+
+	userID, username, _ := currentIdentity(c)
+	_ = storage.CreateAuditLog(systemDB, &userID, username, "ADMIN_RECOVERY_ROTATE", "system", "recovery", "重新生成管理员恢复码", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+
+	utils.Success(c, gin.H{"recoveryCode": nextRecoveryCode})
 }
 
 func localExportBackupHandler(c *gin.Context) {
@@ -1154,7 +1192,7 @@ func localImportBackupHandler(c *gin.Context) {
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "BACKUP_IMPORT", "system", "backup", "导入系统配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
 	clearAuthCookie(c)
 
-	utils.Success(c, gin.H{"message": "导入成功"})
+	utils.Success(c, gin.H{"message": "导入成功", "requiresLogin": true})
 }
 
 func localListProgramsHandler(c *gin.Context) {
@@ -3381,6 +3419,7 @@ func main() {
 		admin.POST("/system/mysql/test", localTestMySQLConfigHandler)
 		admin.PUT("/system/mysql", localSaveMySQLConfigHandler)
 		admin.POST("/system/mysql/restore-last-good", localRestoreMySQLConfigHandler)
+		admin.POST("/system/recovery-code/rotate", localRotateRecoveryCodeHandler)
 		admin.POST("/system/backup/export", localExportBackupHandler)
 		admin.POST("/system/backup/import", localImportBackupHandler)
 		admin.GET("/config", localGetMySQLConfigHandler)

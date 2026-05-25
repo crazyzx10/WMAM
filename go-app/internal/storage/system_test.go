@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 	"time"
@@ -165,6 +166,37 @@ func TestConfigAndMiniPrograms(t *testing.T) {
 	}
 	if len(programs) != 0 {
 		t.Fatalf("expected disabled program to be excluded, got %+v", programs)
+	}
+
+	hasLastGood, err := HasLastGoodMySQLConfig(db)
+	if err != nil {
+		t.Fatalf("HasLastGoodMySQLConfig(empty) error = %v", err)
+	}
+	if hasLastGood {
+		t.Fatal("expected first mysql save not to create a last-good config")
+	}
+	if err := SaveMySQLConfig(db, fieldKey, MySQLConfig{
+		Host:     "10.0.0.2",
+		Port:     3307,
+		Database: "wmam_next",
+		Username: "next",
+		Password: "next-secret",
+	}); err != nil {
+		t.Fatalf("SaveMySQLConfig(second) error = %v", err)
+	}
+	hasLastGood, err = HasLastGoodMySQLConfig(db)
+	if err != nil {
+		t.Fatalf("HasLastGoodMySQLConfig(populated) error = %v", err)
+	}
+	if !hasLastGood {
+		t.Fatal("expected second mysql save to expose a restorable last-good config")
+	}
+	restored, err := RestoreLastGoodMySQLConfig(db, fieldKey)
+	if err != nil {
+		t.Fatalf("RestoreLastGoodMySQLConfig() error = %v", err)
+	}
+	if restored.Host != "127.0.0.1" || restored.Password != "secret" {
+		t.Fatalf("expected previous mysql config to restore, got %+v", restored)
 	}
 }
 
@@ -388,6 +420,21 @@ func TestEncryptedBackupRoundTrip(t *testing.T) {
 	if _, err := CreateMiniProgram(db, fieldKey, "Demo", "wx1234567890abcd", "app-secret", true); err != nil {
 		t.Fatalf("CreateMiniProgram() error = %v", err)
 	}
+	admin, err := GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	if err := CreateSession(db, admin.ID, "backup-token-hash", true, time.Now().Add(30*24*time.Hour), "127.0.0.1", "test"); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	programs, err := ListEnabledMiniProgramsWithSecret(db, fieldKey)
+	if err != nil {
+		t.Fatalf("ListEnabledMiniProgramsWithSecret(before job) error = %v", err)
+	}
+	job, err := CreateFetchJob(db, admin.ID, admin.Username, programs)
+	if err != nil {
+		t.Fatalf("CreateFetchJob(before backup) error = %v", err)
+	}
 
 	backup, err := ExportEncryptedBackup(db, fieldKey, "backup-password")
 	if err != nil {
@@ -408,7 +455,30 @@ func TestEncryptedBackupRoundTrip(t *testing.T) {
 		t.Fatal("expected field key to round-trip")
 	}
 
-	programs, err := ListEnabledMiniProgramsWithSecret(db, importedKey)
+	active, err := ValidateSession(db, "backup-token-hash")
+	if err != nil {
+		t.Fatalf("ValidateSession(after import) error = %v", err)
+	}
+	if active {
+		t.Fatal("expected imported backup to clear login sessions")
+	}
+
+	importedJob, err := GetFetchJobByID(db, job.ID)
+	if err != nil {
+		t.Fatalf("GetFetchJobByID(after import) error = %v", err)
+	}
+	if importedJob.Status != "failed" || importedJob.ErrorSummary != "备份恢复时任务仍在运行，已标记为失败" {
+		t.Fatalf("expected running backup job to be normalized to failed, got %+v", importedJob)
+	}
+	var lockJobID sql.NullInt64
+	if err := db.QueryRow("SELECT job_id FROM fetch_lock WHERE id = 1").Scan(&lockJobID); err != nil {
+		t.Fatalf("read fetch lock after import: %v", err)
+	}
+	if lockJobID.Valid {
+		t.Fatalf("expected imported fetch lock to be cleared, got %d", lockJobID.Int64)
+	}
+
+	programs, err = ListEnabledMiniProgramsWithSecret(db, importedKey)
 	if err != nil {
 		t.Fatalf("ListEnabledMiniProgramsWithSecret() error = %v", err)
 	}

@@ -1,8 +1,9 @@
 import { type FormEvent, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { Copy, Download, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
 type RecoverResponse = {
@@ -10,6 +11,7 @@ type RecoverResponse = {
 };
 
 export function RecoverAdminPage() {
+  const { toast } = useToast();
   const [recoveryCode, setRecoveryCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRecoveryCode, setNewRecoveryCode] = useState("");
@@ -34,6 +36,31 @@ export function RecoverAdminPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function copyNewRecoveryCode() {
+    if (!newRecoveryCode) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(newRecoveryCode);
+      toast({ title: "恢复码已复制", variant: "success" });
+    } catch {
+      toast({ title: "复制失败，请手动选择恢复码", variant: "danger" });
+    }
+  }
+
+  function downloadNewRecoveryCode() {
+    if (!newRecoveryCode) {
+      return;
+    }
+    const blob = new Blob([`${newRecoveryCode}\n`], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `wmam-admin-recovery-${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -65,8 +92,18 @@ export function RecoverAdminPage() {
           />
           {error ? <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div> : null}
           {newRecoveryCode ? (
-            <div className="rounded-md border border-success/30 bg-success/5 px-3 py-2 text-sm text-success">
-              新恢复码：{newRecoveryCode}
+            <div className="rounded-md border border-success/30 bg-success/5 p-3 text-sm text-success">
+              <div className="break-all font-mono">{newRecoveryCode}</div>
+              <div className="mt-3 flex justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={copyNewRecoveryCode}>
+                  <Copy className="h-4 w-4" />
+                  复制
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={downloadNewRecoveryCode}>
+                  <Download className="h-4 w-4" />
+                  下载
+                </Button>
+              </div>
             </div>
           ) : null}
           <Button className="w-full" disabled={loading || !recoveryCode || newPassword.length < 8}>

@@ -114,15 +114,17 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Ending a job marks unfinished steps as skipped and moves progress to a coherent terminal state
     - Runtime error redaction now masks known secrets and sensitive query parameters before they reach job summaries or live logs
 
+20. Admin configuration and recovery hardening
+    - Admins can generate a new recovery code from the System page after confirming the current admin password
+    - Recovery codes can be copied or downloaded immediately after generation or admin-password recovery
+    - MySQL restore availability is exposed to the frontend so the restore button is disabled until a last-good config exists
+    - MySQL connection test and save errors now redact passwords before returning messages to the browser
+    - Backup import clears restored sessions, clears restored fetch locks, and marks imported running jobs as failed
+    - Backup import now forces the frontend back to login after the local system store is overwritten
+
 ## Remaining Stages
 
 The previous eight small follow-up stages are now consolidated into delivery stages. Each stage should still be implemented, tested, committed, and pushed as one complete unit.
-
-20. Admin configuration and recovery hardening
-    - Polish first-use setup guidance and admin recovery-code usability
-    - Re-check MySQL config, mini-program config, user management, and destructive confirmations
-    - Verify encrypted backup export/import overwrite behavior, restored accounts, and restored field encryption key handling
-    - Acceptance: an administrator can recover from a wrong MySQL config and restore a backup without code-level intervention
 
 21. UI polish and permission experience
     - Polish desktop spacing, alignment, empty states, loading states, error states, dark mode, tables, modals, and long-text handling
