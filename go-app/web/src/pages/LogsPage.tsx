@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, RefreshCw, X } from "lucide-react";
 import { Badge, toneForStatus } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatusMessage } from "../components/ui/StatusMessage";
+import { TableShell } from "../components/ui/TableShell";
 import { apiRequest } from "../lib/api";
 
 type Job = {
@@ -126,13 +129,18 @@ export function LogsPage() {
   const [auditPage, setAuditPage] = useState(1);
   const [jobTotal, setJobTotal] = useState(0);
   const [auditTotal, setAuditTotal] = useState(0);
+  const [jobStatusFilter, setJobStatusFilter] = useState("all");
+  const [auditResultFilter, setAuditResultFilter] = useState("all");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
   const [detail, setDetail] = useState<JobDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function loadData() {
     setError("");
+    setLoading(true);
     try {
       const [jobData, auditData] = await Promise.all([
         apiRequest<JobsResponse>(`/api/jobs?page=${jobPage}`),
@@ -144,6 +152,8 @@ export function LogsPage() {
       setAuditTotal(auditData.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取日志失败");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -164,36 +174,62 @@ export function LogsPage() {
     void loadData();
   }, [jobPage, auditPage]);
 
+  const filteredJobs = useMemo(() => {
+    return jobs.filter((job) => jobStatusFilter === "all" || job.status === jobStatusFilter);
+  }, [jobs, jobStatusFilter]);
+
+  const filteredLogs = useMemo(() => {
+    const actionKeyword = auditActionFilter.trim().toLowerCase();
+    return logs.filter((log) => {
+      const matchesResult = auditResultFilter === "all" || log.result === auditResultFilter;
+      const matchesAction = !actionKeyword || (log.action || "").toLowerCase().includes(actionKeyword);
+      return matchesResult && matchesAction;
+    });
+  }, [logs, auditActionFilter, auditResultFilter]);
+
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">操作日志</h1>
-          <p className="mt-1 text-sm text-muted-foreground">查看历史任务摘要和操作审计日志。</p>
-        </div>
-        <Button variant="outline" onClick={loadData}>
-          <RefreshCw className="h-4 w-4" />
-          刷新
-        </Button>
-      </div>
+      <PageHeader
+        title="操作日志"
+        description="查看历史任务摘要和操作审计日志。"
+        action={
+          <Button variant="outline" onClick={loadData} disabled={loading}>
+            <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
+            刷新
+          </Button>
+        }
+      />
 
-      {error ? <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div> : null}
+      <StatusMessage error={error} />
 
       <Card>
-        <div className="mb-4 flex gap-2">
-          <Button variant={tab === "jobs" ? "default" : "outline"} onClick={() => setTab("jobs")}>
-            任务记录
-          </Button>
-          <Button variant={tab === "audit" ? "default" : "outline"} onClick={() => setTab("audit")}>
-            审计日志
-          </Button>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2">
+            <Button variant={tab === "jobs" ? "default" : "outline"} onClick={() => setTab("jobs")}>
+              任务记录
+            </Button>
+            <Button variant={tab === "audit" ? "default" : "outline"} onClick={() => setTab("audit")}>
+              审计日志
+            </Button>
+          </div>
+          {loading ? <span className="text-sm text-muted-foreground">正在刷新...</span> : null}
         </div>
 
         {tab === "jobs" ? (
           <div>
-            <CardTitle>任务记录</CardTitle>
-            <div className="mt-4 overflow-hidden rounded-md border border-border">
-              <table className="w-full text-left text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle>任务记录</CardTitle>
+              <select className="field field-sm w-36" value={jobStatusFilter} onChange={(event) => setJobStatusFilter(event.target.value)}>
+                <option value="all">全部状态</option>
+                <option value="running">执行中</option>
+                <option value="interrupted">已中断</option>
+                <option value="failed">失败</option>
+                <option value="ended">已结束</option>
+                <option value="completed">已完成</option>
+              </select>
+            </div>
+            <TableShell>
+              <table className="min-w-full text-left text-sm">
                 <thead className="bg-muted/60 text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">任务</th>
@@ -205,7 +241,7 @@ export function LogsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {jobs.map((job) => (
+                  {filteredJobs.map((job) => (
                     <tr key={job.id} className="table-row">
                       <td className="px-4 py-3 font-medium">#{job.id}</td>
                       <td className="px-4 py-3">
@@ -215,7 +251,7 @@ export function LogsPage() {
                       <td className="px-4 py-3">
                         {job.completedSteps}/{job.totalSteps}，失败 {job.failedSteps}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{job.startedAt}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{job.startedAt}</td>
                       <td className="px-4 py-3 text-right">
                         <Button variant="outline" size="sm" onClick={() => loadJobDetail(job.id)}>
                           <Eye className="h-4 w-4" />
@@ -224,7 +260,7 @@ export function LogsPage() {
                       </td>
                     </tr>
                   ))}
-                  {jobs.length === 0 ? (
+                  {filteredJobs.length === 0 ? (
                     <tr>
                       <td colSpan={6}>
                         <EmptyState title="暂无任务记录" description="执行拉取后，这里会显示任务摘要和步骤详情入口。" />
@@ -233,14 +269,33 @@ export function LogsPage() {
                   ) : null}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
             <PaginationFooter page={jobPage} total={jobTotal} onPageChange={setJobPage} />
           </div>
         ) : (
           <div>
-            <CardTitle>审计日志</CardTitle>
-            <div className="mt-4 overflow-hidden rounded-md border border-border">
-              <table className="w-full text-left text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle>审计日志</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  className="field field-sm w-32"
+                  value={auditResultFilter}
+                  onChange={(event) => setAuditResultFilter(event.target.value)}
+                >
+                  <option value="all">全部结果</option>
+                  <option value="success">成功</option>
+                  <option value="failed">失败</option>
+                </select>
+                <input
+                  className="field field-sm w-40"
+                  placeholder="动作筛选"
+                  value={auditActionFilter}
+                  onChange={(event) => setAuditActionFilter(event.target.value)}
+                />
+              </div>
+            </div>
+            <TableShell>
+              <table className="min-w-full text-left text-sm">
                 <thead className="bg-muted/60 text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">时间</th>
@@ -251,12 +306,12 @@ export function LogsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map((log) => (
+                  {filteredLogs.map((log) => (
                     <tr key={log.id} className="table-row">
-                      <td className="px-4 py-3 text-muted-foreground">{log.created_at ?? log.createdAt}</td>
-                      <td className="px-4 py-3">{log.username}</td>
-                      <td className="px-4 py-3">{log.action}</td>
-                      <td className="px-4 py-3">{log.description}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{log.created_at ?? log.createdAt}</td>
+                      <td className="px-4 py-3">{log.username || "-"}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{log.action}</td>
+                      <td className="max-w-[420px] break-words px-4 py-3">{log.description || "-"}</td>
                       <td className="px-4 py-3">
                         <Badge tone={log.result === "success" ? "success" : "danger"}>
                           {log.result === "success" ? "成功" : "失败"}
@@ -264,7 +319,7 @@ export function LogsPage() {
                       </td>
                     </tr>
                   ))}
-                  {logs.length === 0 ? (
+                  {filteredLogs.length === 0 ? (
                     <tr>
                       <td colSpan={5}>
                         <EmptyState title="暂无审计日志" description="登录、配置、任务和用户操作会记录在这里。" />
@@ -273,7 +328,7 @@ export function LogsPage() {
                   ) : null}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
             <PaginationFooter page={auditPage} total={auditTotal} onPageChange={setAuditPage} />
           </div>
         )}
@@ -313,11 +368,11 @@ export function LogsPage() {
                   <div className="grid gap-3 text-sm sm:grid-cols-4">
                     <div>
                       <div className="text-muted-foreground">开始时间</div>
-                      <div className="mt-1 font-medium">{detail.job.startedAt}</div>
+                      <div className="mt-1 break-words font-medium">{detail.job.startedAt}</div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">结束时间</div>
-                      <div className="mt-1 font-medium">{detail.job.finishedAt || "-"}</div>
+                      <div className="mt-1 break-words font-medium">{detail.job.finishedAt || "-"}</div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">小程序数</div>
@@ -330,13 +385,13 @@ export function LogsPage() {
                   </div>
 
                   {detail.job.errorSummary ? (
-                    <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+                    <div className="break-words rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
                       {detail.job.errorSummary}
                     </div>
                   ) : null}
 
-                  <div className="overflow-hidden rounded-md border border-border">
-                    <table className="w-full text-left text-sm">
+                  <TableShell className="mt-0">
+                    <table className="min-w-full text-left text-sm">
                       <thead className="bg-muted/60 text-muted-foreground">
                         <tr>
                           <th className="px-4 py-3 font-medium">小程序</th>
@@ -350,20 +405,20 @@ export function LogsPage() {
                         {detail.steps.map((step) => (
                           <tr key={step.id} className="table-row">
                             <td className="px-4 py-3">
-                              <div className="font-medium">{step.programName}</div>
-                              <div className="text-xs text-muted-foreground">{step.appIdMasked}</div>
+                              <div className="break-words font-medium">{step.programName}</div>
+                              <div className="break-all text-xs text-muted-foreground">{step.appIdMasked}</div>
                             </td>
                             <td className="px-4 py-3">{labelOf(stepLabels, step.stepType)}</td>
                             <td className="px-4 py-3">
                               <Badge tone={toneForStatus(step.status)}>{labelOf(stepStatusLabels, step.status)}</Badge>
                             </td>
                             <td className="px-4 py-3">{step.recordCount}</td>
-                            <td className="max-w-[260px] px-4 py-3 text-danger">{step.errorMessage || "-"}</td>
+                            <td className="max-w-[320px] break-words px-4 py-3 text-danger">{step.errorMessage || "-"}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </TableShell>
                 </div>
               ) : null}
             </div>

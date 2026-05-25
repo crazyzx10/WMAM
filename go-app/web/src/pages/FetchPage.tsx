@@ -4,6 +4,9 @@ import { Badge, toneForStatus } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatusMessage } from "../components/ui/StatusMessage";
+import { TableShell } from "../components/ui/TableShell";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
@@ -99,6 +102,14 @@ function stepMark(status?: string) {
   return "-";
 }
 
+function stepMarkClass(status?: string) {
+  if (status === "success") return "text-success";
+  if (status === "running") return "text-foreground";
+  if (status === "failed") return "text-danger";
+  if (status === "skipped") return "text-muted-foreground";
+  return "text-muted-foreground";
+}
+
 function formatJobEvent(event: JobEvent) {
   const time = event.time ?? new Date().toLocaleTimeString();
 
@@ -136,9 +147,13 @@ export function FetchPage() {
   const [permissions, setPermissions] = useState<Permissions>(emptyPermissions);
   const [logs, setLogs] = useState<string[]>(["页面刷新后实时日志会清空。"]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  async function loadState() {
+  async function loadState(showLoading = false) {
     setError("");
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       const [jobData, programData] = await Promise.all([
         apiRequest<CurrentJobResponse>("/api/jobs/current"),
@@ -150,11 +165,15 @@ export function FetchPage() {
       setPrograms(programData.programs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取任务状态失败");
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
-    void loadState();
+    void loadState(true);
   }, []);
 
   useEffect(() => {
@@ -244,10 +263,10 @@ export function FetchPage() {
         return {
           name: program.name,
           status: steps.length ? `${done}/4` : "待创建任务",
-          adunit: stepMark(stepState.adunit_list),
-          summary: stepMark(stepState.summary),
-          detail: stepMark(stepState.detail),
-          settlement: stepMark(stepState.settlement),
+          adunitStatus: stepState.adunit_list,
+          summaryStatus: stepState.summary,
+          detailStatus: stepState.detail,
+          settlementStatus: stepState.settlement,
           progress: `${done}/4`
         };
       });
@@ -277,12 +296,9 @@ export function FetchPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">执行拉取</h1>
-        <p className="mt-1 text-sm text-muted-foreground">手动拉取所有已启用小程序的广告数据。</p>
-      </div>
+      <PageHeader title="执行拉取" description="手动拉取所有已启用小程序的广告数据。" />
 
-      {error ? <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div> : null}
+      <StatusMessage error={error} />
 
       <Card>
         <CardHeader>
@@ -301,6 +317,7 @@ export function FetchPage() {
                 "暂无任务"
               )}
             </p>
+            {loading ? <p className="mt-2 text-sm text-muted-foreground">正在读取任务状态...</p> : null}
           </div>
           <div className="text-sm font-medium">{progress}%</div>
         </CardHeader>
@@ -331,8 +348,8 @@ export function FetchPage() {
         <CardHeader>
           <CardTitle>小程序状态</CardTitle>
         </CardHeader>
-        <div className="overflow-hidden rounded-md border border-border">
-          <table className="w-full border-collapse text-sm">
+        <TableShell className="mt-0">
+          <table className="min-w-full border-collapse text-sm">
             <thead className="bg-muted/60 text-left text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">小程序名称</th>
@@ -349,10 +366,26 @@ export function FetchPage() {
                 <tr key={program.name} className="table-row">
                   <td className="px-4 py-3 font-medium">{program.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{program.status}</td>
-                  <td className="px-4 py-3">{program.adunit}</td>
-                  <td className="px-4 py-3">{program.summary}</td>
-                  <td className="px-4 py-3">{program.detail}</td>
-                  <td className="px-4 py-3">{program.settlement}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block w-5 text-center font-mono ${stepMarkClass(program.adunitStatus)}`}>
+                      {stepMark(program.adunitStatus)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block w-5 text-center font-mono ${stepMarkClass(program.summaryStatus)}`}>
+                      {stepMark(program.summaryStatus)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block w-5 text-center font-mono ${stepMarkClass(program.detailStatus)}`}>
+                      {stepMark(program.detailStatus)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block w-5 text-center font-mono ${stepMarkClass(program.settlementStatus)}`}>
+                      {stepMark(program.settlementStatus)}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{program.progress}</td>
                 </tr>
               ))}
@@ -365,14 +398,14 @@ export function FetchPage() {
               ) : null}
             </tbody>
           </table>
-        </div>
+        </TableShell>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>实时日志</CardTitle>
         </CardHeader>
-        <div className="h-[360px] overflow-auto rounded-md border border-border bg-log p-4 font-mono text-sm leading-7 text-muted-foreground">
+        <div className="h-[360px] overflow-auto rounded-md border border-border bg-log p-4 font-mono text-sm leading-7 text-muted-foreground whitespace-pre-wrap break-words">
           {logs.map((line, index) => (
             <div key={`${line}-${index}`}>{line}</div>
           ))}

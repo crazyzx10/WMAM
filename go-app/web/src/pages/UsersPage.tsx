@@ -4,6 +4,9 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatusMessage } from "../components/ui/StatusMessage";
+import { TableShell } from "../components/ui/TableShell";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
@@ -71,6 +74,9 @@ export function UsersPage() {
 
   async function handleToggle(user: UserRow) {
     const nextStatus = user.status === "active" ? "disabled" : "active";
+    if (nextStatus === "disabled" && !window.confirm(`确认禁用用户 ${user.username}？`)) {
+      return;
+    }
     setMessage("");
     setError("");
     try {
@@ -128,20 +134,20 @@ export function UsersPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">用户管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">创建普通用户、重置密码、启用或禁用账号。</p>
-        </div>
-        <Button variant="outline" onClick={loadUsers} disabled={loading}>
-          <RefreshCw className="h-4 w-4" />
-          刷新
-        </Button>
-      </div>
+      <PageHeader
+        title="用户管理"
+        description="创建普通用户、重置密码、启用或禁用账号。"
+        action={
+          <Button variant="outline" onClick={loadUsers} disabled={loading}>
+            <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
+            刷新
+          </Button>
+        }
+      />
 
       <Card>
         <CardTitle>创建普通用户</CardTitle>
-        <form className="mt-4 grid grid-cols-[1fr_1fr_auto] gap-3" onSubmit={handleCreate}>
+        <form className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleCreate}>
           <input
             className="field"
             placeholder="用户名"
@@ -162,21 +168,12 @@ export function UsersPage() {
         </form>
       </Card>
 
-      {(message || error) && (
-        <div
-          className={[
-            "rounded-md border px-3 py-2 text-sm",
-            error ? "border-danger/30 bg-danger/5 text-danger" : "border-success/30 bg-success/5 text-success"
-          ].join(" ")}
-        >
-          {error || message}
-        </div>
-      )}
+      <StatusMessage message={message} error={error} />
 
       <Card>
         <CardTitle>用户列表</CardTitle>
-        <div className="mt-4 overflow-hidden rounded-md border border-border">
-          <table className="w-full text-left text-sm">
+        <TableShell>
+          <table className="min-w-full text-left text-sm">
             <thead className="bg-muted/60 text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">用户名</th>
@@ -189,7 +186,7 @@ export function UsersPage() {
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} className="table-row">
-                  <td className="px-4 py-3 font-medium">{user.username}</td>
+                  <td className="max-w-[180px] break-words px-4 py-3 font-medium">{user.username}</td>
                   <td className="px-4 py-3">
                     <Badge tone={user.role === "admin" ? "neutral" : "warning"}>{user.role === "admin" ? "管理员" : "普通用户"}</Badge>
                   </td>
@@ -203,12 +200,12 @@ export function UsersPage() {
                     {user.role === "admin" ? (
                       <span className="text-muted-foreground">唯一管理员受保护</span>
                     ) : (
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex min-w-[420px] flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => handleToggle(user)}>
                           {user.status === "active" ? "禁用" : "启用"}
                         </Button>
                         <input
-                          className="field h-8 w-40"
+                          className="field field-xs w-40"
                           type="password"
                           placeholder="新密码"
                           value={resetPasswordById[user.id] ?? ""}
@@ -245,7 +242,7 @@ export function UsersPage() {
               ) : null}
             </tbody>
           </table>
-        </div>
+        </TableShell>
       </Card>
     </div>
   );

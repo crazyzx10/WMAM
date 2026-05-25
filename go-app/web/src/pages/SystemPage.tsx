@@ -3,6 +3,8 @@ import { Copy, DatabaseZap, Download, RotateCcw, Save, ShieldCheck } from "lucid
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatusMessage } from "../components/ui/StatusMessage";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 import { clearAuth } from "../lib/auth";
@@ -252,21 +254,9 @@ export function SystemPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">系统配置</h1>
-        <p className="mt-1 text-sm text-muted-foreground">配置广告数据 MySQL 连接和系统备份。WMAM 启动时不会自动连接 MySQL。</p>
-      </div>
+      <PageHeader title="系统配置" description="配置广告数据 MySQL 连接和系统备份。WMAM 启动时不会自动连接 MySQL。" />
 
-      {(message || error) && (
-        <div
-          className={[
-            "rounded-md border px-3 py-2 text-sm",
-            error ? "border-danger/30 bg-danger/5 text-danger" : "border-success/30 bg-success/5 text-success"
-          ].join(" ")}
-        >
-          {error || message}
-        </div>
-      )}
+      <StatusMessage message={message} error={error} />
 
       <Card>
         <div className="flex items-center justify-between gap-3">
@@ -276,7 +266,7 @@ export function SystemPage() {
           </Button>
         </div>
 
-        <form className="mt-4 grid grid-cols-2 gap-3" onSubmit={handleSave}>
+        <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleSave}>
           <input className="field" placeholder="MySQL 地址" value={config.host} onChange={(event) => update("host", event.target.value)} />
           <input
             className="field"
@@ -301,7 +291,7 @@ export function SystemPage() {
             value={adminPassword}
             onChange={(event) => setAdminPassword(event.target.value)}
           />
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
             <Button type="button" variant="outline" disabled={!adminPassword || !lastGoodAvailable} onClick={handleRestore}>
               <RotateCcw className="h-4 w-4" />
               恢复配置
@@ -351,7 +341,7 @@ export function SystemPage() {
       <Card>
         <CardTitle>系统备份</CardTitle>
         <p className="mt-3 text-sm text-muted-foreground">导出文件会整体加密；导入会覆盖当前本地系统配置。</p>
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <input
             className="field"
             type="password"
@@ -360,7 +350,7 @@ export function SystemPage() {
             onChange={(event) => setBackupPassword(event.target.value)}
           />
           <input className="field" type="file" accept=".wmam" onChange={(event) => setBackupFile(event.target.files?.[0] ?? null)} />
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
             <Button type="button" variant="outline" disabled={!backupPassword || !adminPassword} onClick={handleExport}>
               导出系统配置
             </Button>

@@ -4,6 +4,9 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatusMessage } from "../components/ui/StatusMessage";
+import { TableShell } from "../components/ui/TableShell";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
 
@@ -97,6 +100,9 @@ export function ProgramsPage() {
   }
 
   async function handleStatus(program: Program) {
+    if (program.enabled && !window.confirm(`确认禁用小程序 ${program.name}？`)) {
+      return;
+    }
     setMessage("");
     setError("");
     try {
@@ -134,20 +140,20 @@ export function ProgramsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">小程序配置</h1>
-          <p className="mt-1 text-sm text-muted-foreground">维护参与拉取的微信小程序，AppSecret 只加密保存，不回显。</p>
-        </div>
-        <Button variant="outline" onClick={loadPrograms} disabled={loading}>
-          <RefreshCw className="h-4 w-4" />
-          刷新
-        </Button>
-      </div>
+      <PageHeader
+        title="小程序配置"
+        description="维护参与拉取的微信小程序，AppSecret 只加密保存，不回显。"
+        action={
+          <Button variant="outline" onClick={loadPrograms} disabled={loading}>
+            <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
+            刷新
+          </Button>
+        }
+      />
 
       <Card>
         <CardTitle>{editingId ? "编辑小程序" : "添加小程序"}</CardTitle>
-        <form className="mt-4 grid grid-cols-2 gap-3" onSubmit={handleSubmit}>
+        <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleSubmit}>
           <input className="field" placeholder="小程序名称" value={name} onChange={(event) => setName(event.target.value)} />
           <input
             className="field"
@@ -167,7 +173,7 @@ export function ProgramsPage() {
             <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
             启用
           </label>
-          <div className="col-span-2 flex justify-end gap-2">
+          <div className="flex justify-end gap-2 md:col-span-2">
             {editingId ? (
               <Button type="button" variant="outline" onClick={resetForm}>
                 取消
@@ -178,21 +184,12 @@ export function ProgramsPage() {
         </form>
       </Card>
 
-      {(message || error) && (
-        <div
-          className={[
-            "rounded-md border px-3 py-2 text-sm",
-            error ? "border-danger/30 bg-danger/5 text-danger" : "border-success/30 bg-success/5 text-success"
-          ].join(" ")}
-        >
-          {error || message}
-        </div>
-      )}
+      <StatusMessage message={message} error={error} />
 
       <Card>
         <CardTitle>小程序列表</CardTitle>
-        <div className="mt-4 overflow-hidden rounded-md border border-border">
-          <table className="w-full text-left text-sm">
+        <TableShell>
+          <table className="min-w-full text-left text-sm">
             <thead className="bg-muted/60 text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">名称</th>
@@ -205,8 +202,8 @@ export function ProgramsPage() {
             <tbody>
               {programs.map((program) => (
                 <tr key={program.id} className="table-row">
-                  <td className="px-4 py-3 font-medium">{program.name}</td>
-                  <td className="px-4 py-3">{program.appIdMasked || program.appId}</td>
+                  <td className="max-w-[220px] break-words px-4 py-3 font-medium">{program.name}</td>
+                  <td className="break-all px-4 py-3 font-mono text-xs">{program.appIdMasked || program.appId}</td>
                   <td className="px-4 py-3">
                     <Badge tone={program.appSecretSet ? "success" : "warning"}>{program.appSecretSet ? "已设置" : "未设置"}</Badge>
                   </td>
@@ -238,7 +235,7 @@ export function ProgramsPage() {
               ) : null}
             </tbody>
           </table>
-        </div>
+        </TableShell>
       </Card>
     </div>
   );

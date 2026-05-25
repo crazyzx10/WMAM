@@ -122,15 +122,16 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Backup import clears restored sessions, clears restored fetch locks, and marks imported running jobs as failed
     - Backup import now forces the frontend back to login after the local system store is overwritten
 
+21. UI polish and permission experience
+    - Shared page header, status message, and table shell components keep admin pages visually consistent and easier to replace later
+    - Fetch execution now has initial loading feedback, stable step markers, and long realtime log lines wrap safely
+    - Operation logs now have refresh feedback, current-page filters, horizontally scrollable tables, and detail-modal long-text handling
+    - Mini-program and user management tables now handle long names and IDs better, with confirmation before disabling a program or user
+    - System, mini-program, and user forms now use responsive grid behavior and consistent success/error feedback
+
 ## Remaining Stages
 
 The previous eight small follow-up stages are now consolidated into delivery stages. Each stage should still be implemented, tested, committed, and pushed as one complete unit.
-
-21. UI polish and permission experience
-    - Polish desktop spacing, alignment, empty states, loading states, error states, dark mode, tables, modals, and long-text handling
-    - Keep ordinary-user screens focused on fetch execution and operation logs only
-    - Re-check direct URL access, hidden admin-only actions, operation log pagination, filters, and detail views
-    - Acceptance: administrator and ordinary-user workflows feel coherent, stable, and consistent in the browser
 
 22. Release verification and handoff
     - Run full regression: frontend build, Go tests, release build, startup behavior, clean-data smoke test, and single-binary run check
