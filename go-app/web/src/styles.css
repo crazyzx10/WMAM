@@ -76,6 +76,14 @@ body {
   outline: none;
 }
 
+.field-with-left-icon {
+  padding-left: 36px;
+}
+
+.field-with-right-icon {
+  padding-right: 44px;
+}
+
 .field:focus {
   box-shadow: 0 0 0 2px rgb(var(--ring) / 0.18);
 }

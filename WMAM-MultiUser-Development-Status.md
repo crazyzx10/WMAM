@@ -98,6 +98,10 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Backup export and import require both the backup password and administrator password
     - The system page disables sensitive buttons until the administrator password is present
 
+17. Login input spacing fix
+    - Login input icons now reserve dedicated left padding
+    - Password inputs reserve right padding for browser password visibility controls
+
 ## Verification
 
 Run from `go-app/web`:
