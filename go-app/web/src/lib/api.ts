@@ -1,5 +1,3 @@
-import { getStoredToken } from "./auth";
-
 type ApiResponse<T> = {
   code: number;
   message: string;
@@ -10,14 +8,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
 
-  const token = getStoredToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
   const response = await fetch(path, {
     ...init,
-    headers
+    headers,
+    credentials: "same-origin"
   });
 
   const payload = (await response.json()) as ApiResponse<T>;

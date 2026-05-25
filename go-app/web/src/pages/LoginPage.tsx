@@ -8,7 +8,6 @@ import { type CurrentUser, setAuth } from "../lib/auth";
 import { useTheme } from "../lib/theme";
 
 type LoginResult = {
-  token: string;
   expires_at: string;
   user: CurrentUser;
 };
@@ -32,7 +31,7 @@ export function LoginPage() {
         method: "POST",
         body: JSON.stringify({ username, password, rememberPassword })
       });
-      setAuth(data.token, data.user, rememberPassword);
+      setAuth(data.user, rememberPassword);
       navigate(data.user.must_change_password ? "/change-password" : "/app/fetch", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "登录失败");

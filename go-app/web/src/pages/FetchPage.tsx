@@ -6,7 +6,6 @@ import { Card, CardHeader, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
-import { getStoredToken } from "../lib/auth";
 
 type Job = {
   id: number;
@@ -179,9 +178,8 @@ export function FetchPage() {
 
     async function connectLogStream() {
       try {
-        const token = getStoredToken();
         const response = await fetch(`/api/jobs/${jobId}/events`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          credentials: "same-origin",
           signal: controller.signal
         });
         if (!response.ok || !response.body) {

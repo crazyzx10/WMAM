@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { apiRequest } from "../lib/api";
-import { clearAuth, getStoredToken, getStoredUser } from "../lib/auth";
+import { clearAuth, getStoredUser, setAuth, shouldPersistAuth, type CurrentUser } from "../lib/auth";
 import { Button } from "../components/ui/Button";
 import { useTheme } from "../lib/theme";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
@@ -61,11 +61,62 @@ type ProgramSetupResponse = {
   }>;
 };
 
+type AuthMeResponse = {
+  user: CurrentUser;
+};
+
+function AuthLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+      WMAM
+    </div>
+  );
+}
+
+function useAuthUser() {
+  const [state, setState] = useState<{ loading: boolean; user: CurrentUser | null }>(() => {
+    const user = getStoredUser();
+    return { loading: !user, user };
+  });
+
+  useEffect(() => {
+    if (state.user) {
+      return;
+    }
+
+    let active = true;
+    async function loadCurrentUser() {
+      try {
+        const data = await apiRequest<AuthMeResponse>("/api/auth/me");
+        if (!active) {
+          return;
+        }
+        setAuth(data.user, shouldPersistAuth());
+        setState({ loading: false, user: data.user });
+      } catch {
+        clearAuth();
+        if (active) {
+          setState({ loading: false, user: null });
+        }
+      }
+    }
+
+    void loadCurrentUser();
+    return () => {
+      active = false;
+    };
+  }, [state.user]);
+
+  return state;
+}
+
 function ProtectedRoute() {
   const location = useLocation();
-  const token = getStoredToken();
-  const user = getStoredUser();
-  if (!token) {
+  const { loading, user } = useAuthUser();
+  if (loading) {
+    return <AuthLoading />;
+  }
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
   if (user?.must_change_password && location.pathname !== "/change-password") {
@@ -75,8 +126,11 @@ function ProtectedRoute() {
 }
 
 function ProtectedChangePasswordRoute() {
-  const token = getStoredToken();
-  if (!token) {
+  const { loading, user } = useAuthUser();
+  if (loading) {
+    return <AuthLoading />;
+  }
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
   return <ChangePasswordPage />;

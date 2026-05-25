@@ -79,6 +79,12 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - `scripts/build-release.sh` provides the same flow for Linux/macOS
     - Release output is ignored under `dist/`
 
+13. Session security
+    - Login now issues an HttpOnly `wmam_session` cookie with SameSite=Lax
+    - "Remember password" keeps the server session for 30 days without storing the token in frontend storage
+    - API requests and SSE streams use same-origin credentials
+    - Bearer token support remains as a compatibility fallback
+
 ## Verification
 
 Run from `go-app/web`:

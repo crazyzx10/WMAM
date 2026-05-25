@@ -74,6 +74,8 @@ var (
 	jobEvents   = newJobEventBroker()
 )
 
+const authCookieName = "wmam_session"
+
 type jobEventBroker struct {
 	mu          sync.Mutex
 	subscribers map[int64]map[chan string]struct{}
@@ -489,13 +491,32 @@ func hashAuthToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func setAuthCookie(c *gin.Context, token string, duration time.Duration, persistent bool) {
+	maxAge := 0
+	if persistent {
+		maxAge = int(duration.Seconds())
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(authCookieName, token, maxAge, "/", "", false, true)
+}
+
+func clearAuthCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(authCookieName, "", -1, "/", "", false, true)
+}
+
 func bearerToken(c *gin.Context) string {
 	authHeader := c.GetHeader("Authorization")
 	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
+	if len(parts) == 2 && parts[0] == "Bearer" {
+		return parts[1]
+	}
+
+	token, err := c.Cookie(authCookieName)
+	if err != nil {
 		return ""
 	}
-	return parts[1]
+	return token
 }
 
 func localAuthMiddleware() gin.HandlerFunc {
@@ -580,9 +601,9 @@ func localLoginHandler(c *gin.Context) {
 	_ = storage.CreateSession(systemDB, user.ID, hashAuthToken(token), req.RememberPassword, expiresAt, c.ClientIP(), c.GetHeader("User-Agent"))
 	_ = storage.UpdateLastLogin(systemDB, user.ID)
 	_ = storage.CreateAuditLog(systemDB, &user.ID, user.Username, "LOGIN", "user", fmt.Sprintf("%d", user.ID), "登录成功", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	setAuthCookie(c, token, tokenDuration, req.RememberPassword)
 
 	utils.Success(c, gin.H{
-		"token":      token,
 		"expires_at": expiresAt.Format(time.RFC3339),
 		"user": gin.H{
 			"id":                   user.ID,
@@ -682,6 +703,7 @@ func localLogoutHandler(c *gin.Context) {
 	if token := bearerToken(c); token != "" {
 		_ = storage.RevokeSession(systemDB, hashAuthToken(token))
 	}
+	clearAuthCookie(c)
 	_ = storage.CreateAuditLog(systemDB, &id, name, "LOGOUT", "user", fmt.Sprintf("%d", id), "退出登录", "success", c.ClientIP(), c.GetHeader("User-Agent"))
 
 	utils.Success(c, nil)
@@ -723,6 +745,7 @@ func localChangePasswordHandler(c *gin.Context) {
 		return
 	}
 	_ = storage.RevokeUserSessions(systemDB, user.ID)
+	clearAuthCookie(c)
 	_ = storage.CreateAuditLog(systemDB, &user.ID, user.Username, "PASSWORD_CHANGE", "user", fmt.Sprintf("%d", user.ID), "修改自己的密码", "success", c.ClientIP(), c.GetHeader("User-Agent"))
 
 	utils.Success(c, nil)
@@ -1125,6 +1148,7 @@ func localImportBackupHandler(c *gin.Context) {
 
 	userID, username, _ := currentIdentity(c)
 	_ = storage.CreateAuditLog(systemDB, &userID, username, "BACKUP_IMPORT", "system", "backup", "导入系统配置", "success", c.ClientIP(), c.GetHeader("User-Agent"))
+	clearAuthCookie(c)
 
 	utils.Success(c, gin.H{"message": "导入成功"})
 }

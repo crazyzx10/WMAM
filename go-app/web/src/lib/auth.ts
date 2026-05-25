@@ -14,7 +14,7 @@ function activeStorage() {
 }
 
 export function getStoredToken() {
-  return localStorage.getItem(tokenKey) ?? sessionStorage.getItem(tokenKey);
+  return null;
 }
 
 export function getStoredUser(): CurrentUser | null {
@@ -31,10 +31,13 @@ export function getStoredUser(): CurrentUser | null {
   }
 }
 
-export function setAuth(token: string, user: CurrentUser, rememberPassword: boolean) {
+export function shouldPersistAuth() {
+  return localStorage.getItem(rememberKey) === "1";
+}
+
+export function setAuth(user: CurrentUser, rememberPassword: boolean) {
   clearAuth();
   const storage = rememberPassword ? localStorage : sessionStorage;
-  storage.setItem(tokenKey, token);
   storage.setItem(userKey, JSON.stringify(user));
   localStorage.setItem(rememberKey, rememberPassword ? "1" : "0");
 }

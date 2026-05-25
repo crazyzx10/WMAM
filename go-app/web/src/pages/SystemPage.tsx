@@ -4,7 +4,6 @@ import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { useToast } from "../components/ui/Toast";
 import { apiRequest } from "../lib/api";
-import { getStoredToken } from "../lib/auth";
 
 type MySQLConfig = {
   host: string;
@@ -126,9 +125,9 @@ export function SystemPage() {
       const response = await fetch("/api/system/backup/export", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getStoredToken() ?? ""}`
+          "Content-Type": "application/json"
         },
+        credentials: "same-origin",
         body: JSON.stringify({ adminPassword, backupPassword })
       });
       if (!response.ok) {
@@ -168,9 +167,7 @@ export function SystemPage() {
       form.set("adminPassword", adminPassword);
       const response = await fetch("/api/system/backup/import", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${getStoredToken() ?? ""}`
-        },
+        credentials: "same-origin",
         body: form
       });
       const payload = await response.json();
