@@ -77,6 +77,24 @@ admin / admin123
 
 首次登录后请立刻修改密码，并保存首次启动日志中显示的管理员恢复码。
 
+## 发布构建
+
+可以使用发布脚本生成可部署目录：
+
+```powershell
+.\scripts\build-release.ps1 -Target current
+.\scripts\build-release.ps1 -Target linux-amd64
+```
+
+Linux/macOS：
+
+```bash
+./scripts/build-release.sh current
+./scripts/build-release.sh linux-amd64
+```
+
+发布产物位于 `dist/`，包含可执行程序、`config.yaml.example`、README 和部署说明。
+
 ## 使用流程
 
 1. 管理员登录并修改默认密码。

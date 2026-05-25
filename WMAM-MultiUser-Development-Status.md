@@ -74,6 +74,11 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - `WMAM-Deployment-Guide.md` documents local and server deployment
     - `README.md` is updated for the multi-user Web version
 
+12. Release packaging
+    - `scripts/build-release.ps1` builds Windows/Linux release directories
+    - `scripts/build-release.sh` provides the same flow for Linux/macOS
+    - Release output is ignored under `dist/`
+
 ## Verification
 
 Run from `go-app/web`:

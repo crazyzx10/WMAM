@@ -98,6 +98,40 @@ go build -o wmam-server.exe .
 .\wmam-server.exe
 ```
 
+也可以使用发布脚本一次生成发布目录：
+
+Windows PowerShell：
+
+```powershell
+.\scripts\build-release.ps1 -Target current
+.\scripts\build-release.ps1 -Target linux-amd64
+.\scripts\build-release.ps1 -Target all
+```
+
+Linux/macOS Bash：
+
+```bash
+./scripts/build-release.sh current
+./scripts/build-release.sh linux-amd64
+./scripts/build-release.sh all
+```
+
+发布产物会输出到 `dist/`，例如：
+
+```text
+dist/
+  wmam-windows-amd64/
+    wmam-server.exe
+    config.yaml.example
+    README.md
+    WMAM-Deployment-Guide.md
+  wmam-linux-amd64/
+    wmam-server
+    config.yaml.example
+    README.md
+    WMAM-Deployment-Guide.md
+```
+
 ## 5. 首次使用
 
 首次启动后访问：
