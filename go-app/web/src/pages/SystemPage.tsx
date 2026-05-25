@@ -230,12 +230,12 @@ export function SystemPage() {
           <input
             className="field"
             type="password"
-            placeholder="管理员密码，可留空"
+            placeholder="管理员密码"
             value={adminPassword}
             onChange={(event) => setAdminPassword(event.target.value)}
           />
           <div className="col-span-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={handleRestore}>
+            <Button type="button" variant="outline" disabled={!adminPassword} onClick={handleRestore}>
               <RotateCcw className="h-4 w-4" />
               恢复配置
             </Button>
@@ -243,7 +243,7 @@ export function SystemPage() {
               <DatabaseZap className="h-4 w-4" />
               测试连接
             </Button>
-            <Button disabled={!config.host || !config.database || !config.username}>
+            <Button disabled={!config.host || !config.database || !config.username || !adminPassword}>
               <Save className="h-4 w-4" />
               保存配置
             </Button>
@@ -264,10 +264,10 @@ export function SystemPage() {
           />
           <input className="field" type="file" accept=".wmam" onChange={(event) => setBackupFile(event.target.files?.[0] ?? null)} />
           <div className="col-span-2 flex justify-end gap-2">
-            <Button type="button" variant="outline" disabled={!backupPassword} onClick={handleExport}>
+            <Button type="button" variant="outline" disabled={!backupPassword || !adminPassword} onClick={handleExport}>
               导出系统配置
             </Button>
-            <Button type="button" variant="warning" disabled={!backupPassword || !backupFile} onClick={handleImport}>
+            <Button type="button" variant="warning" disabled={!backupPassword || !backupFile || !adminPassword} onClick={handleImport}>
               导入并覆盖
             </Button>
           </div>

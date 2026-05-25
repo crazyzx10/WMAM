@@ -963,7 +963,8 @@ func testStoredMySQLConfig(cfg storage.MySQLConfig) error {
 
 func requireAdminPassword(c *gin.Context, password string) bool {
 	if strings.TrimSpace(password) == "" {
-		return true
+		utils.Error(c, 400, "请输入管理员密码")
+		return false
 	}
 
 	userID, _ := c.Get("user_id")

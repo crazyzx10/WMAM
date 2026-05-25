@@ -93,6 +93,11 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Job history and audit log tabs now use the backend `total` values
     - Lightweight previous/next pagination keeps the log page usable as records grow
 
+16. Sensitive system operation confirmation
+    - Saving or restoring MySQL config now requires the current administrator password
+    - Backup export and import require both the backup password and administrator password
+    - The system page disables sensitive buttons until the administrator password is present
+
 ## Verification
 
 Run from `go-app/web`:
