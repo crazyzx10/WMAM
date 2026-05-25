@@ -57,6 +57,8 @@ type AuditResponse = {
   total: number;
 };
 
+const pageSize = 20;
+
 const jobStatusLabels: Record<string, string> = {
   running: "执行中",
   interrupted: "已中断",
@@ -87,10 +89,43 @@ function labelOf(labels: Record<string, string>, value?: string) {
   return labels[value] ?? value;
 }
 
+function PaginationFooter({
+  page,
+  total,
+  onPageChange
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+
+  return (
+    <div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span>
+        共 {total} 条 · 第 {safePage} / {totalPages} 页
+      </span>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => onPageChange(safePage - 1)}>
+          上一页
+        </Button>
+        <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => onPageChange(safePage + 1)}>
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function LogsPage() {
   const [tab, setTab] = useState<"jobs" | "audit">("jobs");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [jobPage, setJobPage] = useState(1);
+  const [auditPage, setAuditPage] = useState(1);
+  const [jobTotal, setJobTotal] = useState(0);
+  const [auditTotal, setAuditTotal] = useState(0);
   const [detail, setDetail] = useState<JobDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -100,11 +135,13 @@ export function LogsPage() {
     setError("");
     try {
       const [jobData, auditData] = await Promise.all([
-        apiRequest<JobsResponse>("/api/jobs"),
-        apiRequest<AuditResponse>("/api/audit-logs")
+        apiRequest<JobsResponse>(`/api/jobs?page=${jobPage}`),
+        apiRequest<AuditResponse>(`/api/audit-logs?page=${auditPage}`)
       ]);
       setJobs(jobData.jobs);
+      setJobTotal(jobData.total);
       setLogs(auditData.logs);
+      setAuditTotal(auditData.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取日志失败");
     }
@@ -125,7 +162,7 @@ export function LogsPage() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [jobPage, auditPage]);
 
   return (
     <div className="space-y-5">
@@ -197,6 +234,7 @@ export function LogsPage() {
                 </tbody>
               </table>
             </div>
+            <PaginationFooter page={jobPage} total={jobTotal} onPageChange={setJobPage} />
           </div>
         ) : (
           <div>
@@ -236,6 +274,7 @@ export function LogsPage() {
                 </tbody>
               </table>
             </div>
+            <PaginationFooter page={auditPage} total={auditTotal} onPageChange={setAuditPage} />
           </div>
         )}
       </Card>

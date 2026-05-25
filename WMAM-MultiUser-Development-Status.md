@@ -89,6 +89,10 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Admin-only pages redirect ordinary users back to fetch execution even if they type the URL directly
     - Backend API permission enforcement remains the source of truth
 
+15. Operation log pagination
+    - Job history and audit log tabs now use the backend `total` values
+    - Lightweight previous/next pagination keeps the log page usable as records grow
+
 ## Verification
 
 Run from `go-app/web`:
