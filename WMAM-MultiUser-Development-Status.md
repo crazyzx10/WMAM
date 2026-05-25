@@ -85,6 +85,10 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - API requests and SSE streams use same-origin credentials
     - Bearer token support remains as a compatibility fallback
 
+14. Frontend permission guard
+    - Admin-only pages redirect ordinary users back to fetch execution even if they type the URL directly
+    - Backend API permission enforcement remains the source of truth
+
 ## Verification
 
 Run from `go-app/web`:

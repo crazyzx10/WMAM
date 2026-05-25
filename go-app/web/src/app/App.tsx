@@ -337,9 +337,9 @@ function AppLayout() {
           <Routes>
             <Route path="/fetch" element={<FetchPage />} />
             <Route path="/logs" element={<LogsPage />} />
-            <Route path="/programs" element={<ProgramsPage />} />
-            <Route path="/system" element={<SystemPage />} />
-            <Route path="/users" element={<UsersPage />} />
+            <Route path="/programs" element={user?.role === "admin" ? <ProgramsPage /> : <Navigate to="/app/fetch" replace />} />
+            <Route path="/system" element={user?.role === "admin" ? <SystemPage /> : <Navigate to="/app/fetch" replace />} />
+            <Route path="/users" element={user?.role === "admin" ? <UsersPage /> : <Navigate to="/app/fetch" replace />} />
             <Route path="*" element={<Navigate to="/app/fetch" replace />} />
           </Routes>
         </main>
