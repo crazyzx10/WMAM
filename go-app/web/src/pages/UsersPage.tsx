@@ -1,10 +1,11 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { Trash2, UserPlus } from "lucide-react";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
+import { RefreshButton } from "../components/ui/RefreshButton";
 import { StatusMessage } from "../components/ui/StatusMessage";
 import { TableShell } from "../components/ui/TableShell";
 import { useToast } from "../components/ui/Toast";
@@ -128,12 +129,7 @@ export function UsersPage() {
       <PageHeader
         title="用户管理"
         description="创建普通用户、重置密码、启用或禁用账号。"
-        action={
-          <Button variant="outline" onClick={loadUsers} disabled={loading}>
-            <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
-            刷新
-          </Button>
-        }
+        action={<RefreshButton onClick={loadUsers} loading={loading} />}
       />
 
       <Card>

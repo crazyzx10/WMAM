@@ -74,6 +74,8 @@ body {
   background: rgb(var(--background));
   padding: 0 12px;
   color: rgb(var(--foreground));
+  font-size: 14px;
+  line-height: 20px;
   outline: none;
 }
 

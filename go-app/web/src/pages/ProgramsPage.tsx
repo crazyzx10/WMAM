@@ -1,10 +1,11 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
+import { RefreshButton } from "../components/ui/RefreshButton";
 import { StatusMessage } from "../components/ui/StatusMessage";
 import { TableShell } from "../components/ui/TableShell";
 import { useToast } from "../components/ui/Toast";
@@ -135,12 +136,7 @@ export function ProgramsPage() {
       <PageHeader
         title="小程序配置"
         description="维护参与拉取的微信小程序，AppSecret 只加密保存，不回显。"
-        action={
-          <Button variant="outline" onClick={loadPrograms} disabled={loading}>
-            <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
-            刷新
-          </Button>
-        }
+        action={<RefreshButton onClick={loadPrograms} loading={loading} />}
       />
 
       <Card>

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, RefreshCw, X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { Badge, toneForStatus } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
+import { RefreshButton } from "../components/ui/RefreshButton";
 import { StatusMessage } from "../components/ui/StatusMessage";
 import { TableShell } from "../components/ui/TableShell";
 import { apiRequest } from "../lib/api";
@@ -192,12 +193,7 @@ export function LogsPage() {
       <PageHeader
         title="操作日志"
         description="查看历史任务摘要和操作审计日志。"
-        action={
-          <Button variant="outline" onClick={loadData} disabled={loading}>
-            <RefreshCw className={["h-4 w-4", loading ? "animate-spin" : ""].join(" ")} />
-            刷新
-          </Button>
-        }
+        action={<RefreshButton onClick={loadData} loading={loading} />}
       />
 
       <StatusMessage error={error} />

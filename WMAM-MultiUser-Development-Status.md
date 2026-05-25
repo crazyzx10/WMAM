@@ -94,9 +94,9 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Lightweight previous/next pagination keeps the log page usable as records grow
 
 16. Sensitive system operation confirmation
-    - Saving or restoring MySQL config now requires the current administrator password
     - Backup export and import require both the backup password and administrator password
-    - The system page disables sensitive buttons until the administrator password is present
+    - Recovery-code rotation requires the current administrator password
+    - MySQL config save and restore are available to authenticated administrators from the System page
 
 17. Login input spacing fix
     - Login input icons now reserve dedicated left padding

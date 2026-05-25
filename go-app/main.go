@@ -1025,19 +1025,13 @@ func localTestMySQLConfigHandler(c *gin.Context) {
 }
 
 func localSaveMySQLConfigHandler(c *gin.Context) {
-	var req struct {
-		storage.MySQLConfig
-		AdminPassword string `json:"adminPassword"`
-	}
+	var req storage.MySQLConfig
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Error(c, 400, "参数错误")
 		return
 	}
-	if !requireAdminPassword(c, req.AdminPassword) {
-		return
-	}
 
-	next := req.MySQLConfig
+	next := req
 	current, _ := storage.GetMySQLConfig(systemDB, fieldKey, true)
 	if strings.TrimSpace(next.Password) == "" {
 		next.Password = current.Password
@@ -1065,14 +1059,6 @@ func localSaveMySQLConfigHandler(c *gin.Context) {
 }
 
 func localRestoreMySQLConfigHandler(c *gin.Context) {
-	var req struct {
-		AdminPassword string `json:"adminPassword"`
-	}
-	_ = c.ShouldBindJSON(&req)
-	if !requireAdminPassword(c, req.AdminPassword) {
-		return
-	}
-
 	if _, err := storage.RestoreLastGoodMySQLConfig(systemDB, fieldKey); err != nil {
 		utils.Error(c, 500, "恢复配置失败："+err.Error())
 		return
