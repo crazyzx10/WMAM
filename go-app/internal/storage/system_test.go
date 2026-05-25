@@ -237,6 +237,81 @@ func TestFetchJobStateMachineAndPermissions(t *testing.T) {
 	}
 }
 
+func TestFetchJobRetryAndEndStepAccounting(t *testing.T) {
+	db, err := OpenSystemDB(t.TempDir())
+	if err != nil {
+		t.Fatalf("OpenSystemDB() error = %v", err)
+	}
+	defer db.Close()
+
+	fieldKey := []byte("12345678901234567890123456789012")
+	if _, err := EnsureDefaultAdmin(db, "hashed-password"); err != nil {
+		t.Fatalf("EnsureDefaultAdmin() error = %v", err)
+	}
+	admin, err := GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	program, err := CreateMiniProgram(db, fieldKey, "Demo", "wx1234567890abcd", "app-secret", true)
+	if err != nil {
+		t.Fatalf("CreateMiniProgram() error = %v", err)
+	}
+	job, err := CreateFetchJob(db, admin.ID, admin.Username, []MiniProgram{*program})
+	if err != nil {
+		t.Fatalf("CreateFetchJob() error = %v", err)
+	}
+	steps, err := ListFetchJobSteps(db, job.ID)
+	if err != nil {
+		t.Fatalf("ListFetchJobSteps() error = %v", err)
+	}
+	if len(steps) != 4 {
+		t.Fatalf("expected 4 steps, got %d", len(steps))
+	}
+
+	if err := MarkFetchJobStepRunning(db, steps[0].ID, program.ID, program.Name, steps[0].StepType); err != nil {
+		t.Fatalf("MarkFetchJobStepRunning(first) error = %v", err)
+	}
+	if err := MarkFetchJobStepFinished(db, job.ID, steps[0].ID, "failed", 3, "temporary error"); err != nil {
+		t.Fatalf("MarkFetchJobStepFinished(failed) error = %v", err)
+	}
+	if err := MarkFetchJobStepRunning(db, steps[0].ID, program.ID, program.Name, steps[0].StepType); err != nil {
+		t.Fatalf("MarkFetchJobStepRunning(retry) error = %v", err)
+	}
+	steps, err = ListFetchJobSteps(db, job.ID)
+	if err != nil {
+		t.Fatalf("ListFetchJobSteps(retry) error = %v", err)
+	}
+	if steps[0].Status != "running" || steps[0].RetryCount != 1 || steps[0].FinishedAt != "" || steps[0].ErrorMessage != "" {
+		t.Fatalf("expected failed step to be prepared for retry, got %+v", steps[0])
+	}
+	if err := MarkFetchJobStepFinished(db, job.ID, steps[0].ID, "success", 3, ""); err != nil {
+		t.Fatalf("MarkFetchJobStepFinished(success) error = %v", err)
+	}
+
+	job, err = EndFetchJob(db, job.ID)
+	if err != nil {
+		t.Fatalf("EndFetchJob() error = %v", err)
+	}
+	if job.Status != "ended" || job.ProgressPercent != 100 || job.CompletedSteps != 1 || job.FailedSteps != 0 {
+		t.Fatalf("expected ended job to account for skipped unfinished steps, got %+v", job)
+	}
+	steps, err = ListFetchJobSteps(db, job.ID)
+	if err != nil {
+		t.Fatalf("ListFetchJobSteps(ended) error = %v", err)
+	}
+	for i, step := range steps {
+		if i == 0 {
+			if step.Status != "success" {
+				t.Fatalf("expected completed step to stay success, got %+v", step)
+			}
+			continue
+		}
+		if step.Status != "skipped" || step.ErrorMessage != "任务已结束" {
+			t.Fatalf("expected unfinished step to be skipped after end, got %+v", step)
+		}
+	}
+}
+
 func TestFetchJobLockHeartbeatAndExpiry(t *testing.T) {
 	db, err := OpenSystemDB(t.TempDir())
 	if err != nil {

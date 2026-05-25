@@ -106,15 +106,17 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Topbar title copy was removed from the app shell
     - Topbar and sidebar divider lines now share the same 64px border-box height model
 
+19. Real fetch-path acceptance and data correctness
+    - Multi-user fetch jobs now use the correct Chinese date column for incremental summary and detail pulls
+    - Ad-unit list steps now report the processed record count back to the job summary
+    - Summary and detail steps now report partial range/save failures as failed steps while keeping successful writes
+    - Failed steps are cleaned before retry so resume can re-run failed or unfinished work accurately
+    - Ending a job marks unfinished steps as skipped and moves progress to a coherent terminal state
+    - Runtime error redaction now masks known secrets and sensitive query parameters before they reach job summaries or live logs
+
 ## Remaining Stages
 
-The previous eight small follow-up stages are now consolidated into four delivery stages. Each stage should still be implemented, tested, committed, and pushed as one complete unit.
-
-19. Real fetch-path acceptance and data correctness
-    - Verify the configured MySQL path with a real or representative database
-    - Confirm the existing WeChat fetch logic writes all required ad data through the current job runner
-    - Harden interrupt, resume, end, partial failure, lock release, and masked error behavior
-    - Acceptance: admin and ordinary-user fetch flows pass, job summaries match database writes, and secrets do not leak into logs or API responses
+The previous eight small follow-up stages are now consolidated into delivery stages. Each stage should still be implemented, tested, committed, and pushed as one complete unit.
 
 20. Admin configuration and recovery hardening
     - Polish first-use setup guidance and admin recovery-code usability

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "modernc.org/sqlite"
 )
 
 func TestBearerTokenPrefersHeaderAndFallsBackToCookie(t *testing.T) {
@@ -42,5 +45,39 @@ func TestSetAuthCookieUsesHttpOnlySameSiteLax(t *testing.T) {
 		if !strings.Contains(header, want) {
 			t.Fatalf("expected Set-Cookie header to contain %q, got %q", want, header)
 		}
+	}
+}
+
+func TestRedactRuntimeErrorMasksSecretsAndQueryValues(t *testing.T) {
+	err := errors.New(`Get "https://example.test/path?access_token=token-value&secret=raw-secret&password=db-pass": raw-secret db-pass`)
+	got := redactRuntimeError(err, "raw-secret", "db-pass")
+
+	for _, leaked := range []string{"token-value", "raw-secret", "db-pass"} {
+		if strings.Contains(got, leaked) {
+			t.Fatalf("expected sensitive value %q to be redacted, got %q", leaked, got)
+		}
+	}
+	if !strings.Contains(got, "[redacted]") {
+		t.Fatalf("expected redacted marker, got %q", got)
+	}
+}
+
+func TestGetLatestDataDateUsesChineseDateColumn(t *testing.T) {
+	database, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer database.Close()
+
+	if _, err := database.Exec(`CREATE TABLE publisher_adpos_general (小程序ID TEXT, 日期 TEXT)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := database.Exec(`INSERT INTO publisher_adpos_general (小程序ID, 日期) VALUES (?, ?), (?, ?)`, "wx-demo", "2026-05-20", "wx-demo", "2026-05-21"); err != nil {
+		t.Fatalf("insert data: %v", err)
+	}
+
+	got := getLatestDataDate(database, "publisher_adpos_general", "日期", "wx-demo", "2025-07-01")
+	if got != "2026-05-22" {
+		t.Fatalf("expected next date after latest data, got %q", got)
 	}
 }

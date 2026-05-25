@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -75,6 +76,8 @@ var (
 )
 
 const authCookieName = "wmam_session"
+
+var sensitiveKeyValuePattern = regexp.MustCompile(`(?i)(access_token|secret|appsecret|password|db_password)=([^&\s"'<>]+)`)
 
 type jobEventBroker struct {
 	mu          sync.Mutex
@@ -1297,11 +1300,20 @@ func redactRuntimeError(err error, secrets ...string) string {
 	if err == nil {
 		return ""
 	}
-	message := err.Error()
+	return redactSensitiveText(err.Error(), secrets...)
+}
+
+func redactSensitiveText(message string, secrets ...string) string {
+	message = sensitiveKeyValuePattern.ReplaceAllString(message, "$1=[redacted]")
 	for _, secret := range secrets {
 		if secret != "" {
 			message = strings.ReplaceAll(message, secret, "[redacted]")
+			message = strings.ReplaceAll(message, url.QueryEscape(secret), "[redacted]")
 		}
+	}
+	if len([]rune(message)) > 500 {
+		runes := []rune(message)
+		message = string(runes[:500]) + "..."
 	}
 	return message
 }
@@ -1342,6 +1354,30 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 					return
 				}
 			case <-stopHeartbeat:
+				return
+			}
+		}
+	}()
+
+	jobCtx, cancelJobCtx := context.WithCancel(context.Background())
+	stopJobMonitor := make(chan struct{})
+	var stopJobMonitorOnce sync.Once
+	defer stopJobMonitorOnce.Do(func() {
+		close(stopJobMonitor)
+		cancelJobCtx()
+	})
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				stillRunning, err := storage.IsFetchJobRunning(systemDB, jobID)
+				if err != nil || !stillRunning {
+					cancelJobCtx()
+					return
+				}
+			case <-stopJobMonitor:
 				return
 			}
 		}
@@ -1477,13 +1513,13 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		recordCount := 0
 		switch step.StepType {
 		case string(jobstate.StepAdunitList):
-			err = syncAdUnitList(database, program.Name, program.AppID, program.AppSecret, token, apiBase, logChan)
+			recordCount, err = syncAdUnitList(database, program.Name, program.AppID, program.AppSecret, token, apiBase, logChan)
 		case string(jobstate.StepSummary):
-			lastDate := getLatestDataDate(database, "publisher_adpos_general", "鏃ユ湡", program.AppID, startDate)
-			recordCount, err = syncSummaryData(context.Background(), database, program.Name, program.AppID, program.AppSecret, token, apiBase, lastDate, endDate, logChan)
+			lastDate := getLatestDataDate(database, "publisher_adpos_general", "日期", program.AppID, startDate)
+			recordCount, err = syncSummaryData(jobCtx, database, program.Name, program.AppID, program.AppSecret, token, apiBase, lastDate, endDate, logChan)
 		case string(jobstate.StepDetail):
-			lastDate := getLatestDataDate(database, "publisher_adunit_general", "鏃ユ湡", program.AppID, startDate)
-			recordCount, err = syncDetailData(context.Background(), database, program.Name, program.AppID, program.AppSecret, token, apiBase, lastDate, endDate, logChan)
+			lastDate := getLatestDataDate(database, "publisher_adunit_general", "日期", program.AppID, startDate)
+			recordCount, err = syncDetailData(jobCtx, database, program.Name, program.AppID, program.AppSecret, token, apiBase, lastDate, endDate, logChan)
 		case string(jobstate.StepSettlement):
 			err = syncSettlementData(database, program.Name, program.AppID, program.AppSecret, token, apiBase, logChan)
 			if err == nil {
@@ -1491,6 +1527,14 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 			}
 		default:
 			err = fmt.Errorf("unknown step type %s", step.StepType)
+		}
+
+		if jobCtx.Err() != nil {
+			return
+		}
+		stillRunning, runningErr := storage.IsFetchJobRunning(systemDB, jobID)
+		if runningErr != nil || !stillRunning {
+			return
 		}
 
 		if err != nil {
@@ -2282,8 +2326,11 @@ func executeFetchHandler(c *gin.Context) {
 			})
 
 			logChan <- "\n----- 1. 拉取广告位清单 -----"
-			if err := syncAdUnitList(database, mp.Name, mp.AppID, mp.AppSecret, token, apiBase, logChan); err != nil {
+			adunitCount, err := syncAdUnitList(database, mp.Name, mp.AppID, mp.AppSecret, token, apiBase, logChan)
+			if err != nil {
 				logChan <- fmt.Sprintf("❌ [%s] 同步广告位列表失败: %v", mp.Name, err)
+			} else {
+				logChan <- fmt.Sprintf("广告位清单拉取完成, 共 %d 条", adunitCount)
 			}
 
 			endDate := time.Now().Format("2006-01-02")
@@ -2443,8 +2490,8 @@ var allowedTables = map[string]bool{
 }
 
 var allowedColumns = map[string]bool{
-	"日期":       true,
-	"data拉取日期": true,
+	"日期":     true,
+	"数据拉取日期": true,
 }
 
 func getLatestDataDate(database *sql.DB, tableName, dateColumn, appid string, defaultDate string) string {
@@ -2510,12 +2557,12 @@ func formatDuration(ms int64) string {
 	return fmt.Sprintf("%d 秒", seconds)
 }
 
-func syncAdUnitList(database *sql.DB, miniProgramName, appid, appsecret, accessToken, apiBase string, logChan chan<- string) error {
+func syncAdUnitList(database *sql.DB, miniProgramName, appid, appsecret, accessToken, apiBase string, logChan chan<- string) (int, error) {
 	logChan <- fmt.Sprintf("✅ [%s] 正在获取广告位清单...", miniProgramName)
 
 	data, err := fetchDataWithRetry(accessToken, "get_adunit_list", appid, appsecret, apiBase, map[string]string{})
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	var adUnits []map[string]interface{}
@@ -2529,6 +2576,7 @@ func syncAdUnitList(database *sql.DB, miniProgramName, appid, appsecret, accessT
 
 	if len(adUnits) > 0 {
 		batchSize := 100
+		savedCount := 0
 		for i := 0; i < len(adUnits); i += batchSize {
 			end := i + batchSize
 			if end > len(adUnits) {
@@ -2618,11 +2666,13 @@ func syncAdUnitList(database *sql.DB, miniProgramName, appid, appsecret, accessT
 						状态名称 = VALUES(状态名称),
 						更新时间 = CURRENT_TIMESTAMP`
 			if _, err := database.Exec(query, valueArgs...); err != nil {
-				return err
+				return savedCount, err
 			}
+			savedCount += len(batch)
 		}
 
 		logChan <- fmt.Sprintf("✅ [%s] 广告位清单已保存", miniProgramName)
+		adUnits = adUnits[:savedCount]
 	}
 
 	if _, err := database.Exec(`
@@ -2633,7 +2683,7 @@ func syncAdUnitList(database *sql.DB, miniProgramName, appid, appsecret, accessT
 	}
 
 	logChan <- fmt.Sprintf("✅ [%s] 广告位列表同步完成, 共 %d 个广告位", miniProgramName, len(adUnits))
-	return nil
+	return len(adUnits), nil
 }
 
 func getMonthRanges(startDate, endDate string) ([]map[string]string, error) {
@@ -2691,11 +2741,25 @@ func fetchDataWithRetry(token, action, appid, appsecret, apiBase string, extraPa
 			time.Sleep(time.Duration(retryCount) * time.Second)
 			continue
 		}
-		defer resp.Body.Close()
+
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+				retryCount++
+				time.Sleep(time.Duration(retryCount) * time.Second)
+				continue
+			}
+			return nil, fmt.Errorf("微信接口 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 
 		var result map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
 			return nil, fmt.Errorf("JSON解析失败: %v", err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			return nil, fmt.Errorf("读取微信接口响应失败: %v", err)
 		}
 
 		if errcode, ok := result["errcode"].(float64); ok && errcode != 0 {
@@ -2783,6 +2847,17 @@ func fetchAllPagesByDateRange(token, action, startDate, endDate, appid, appsecre
 	return allList, nil
 }
 
+func summarizeStepErrors(errors []string) error {
+	if len(errors) == 0 {
+		return nil
+	}
+	items := errors
+	if len(items) > 3 {
+		items = append(append([]string{}, items[:3]...), fmt.Sprintf("还有 %d 个错误", len(errors)-3))
+	}
+	return fmt.Errorf("%s", strings.Join(items, "; "))
+}
+
 func syncSummaryData(ctx context.Context, database *sql.DB, miniProgramName, appid, appsecret, accessToken, apiBase, startDate, endDate string, logChan chan<- string) (int, error) {
 	ranges, err := getMonthRanges(startDate, endDate)
 	if err != nil {
@@ -2790,6 +2865,7 @@ func syncSummaryData(ctx context.Context, database *sql.DB, miniProgramName, app
 	}
 
 	totalCount := 0
+	stepErrors := make([]string, 0)
 	for _, r := range ranges {
 		select {
 		case <-ctx.Done():
@@ -2800,6 +2876,7 @@ func syncSummaryData(ctx context.Context, database *sql.DB, miniProgramName, app
 		data, err := fetchAllPagesByDateRange(accessToken, "publisher_adpos_general", r["start"], r["end"], appid, appsecret, apiBase)
 		if err != nil {
 			logChan <- fmt.Sprintf("❌ [%s] %s ~ %s: 拉取失败 - %v", miniProgramName, r["start"], r["end"], err)
+			stepErrors = append(stepErrors, fmt.Sprintf("%s ~ %s 拉取失败: %v", r["start"], r["end"], err))
 			continue
 		}
 
@@ -2886,6 +2963,7 @@ func syncSummaryData(ctx context.Context, database *sql.DB, miniProgramName, app
 						千次曝光收入元 = VALUES(千次曝光收入元)`
 				if _, err := database.Exec(query, valueArgs...); err != nil {
 					logChan <- fmt.Sprintf("❌ [%s] %s ~ %s: 保存失败 - %v", miniProgramName, r["start"], r["end"], err)
+					stepErrors = append(stepErrors, fmt.Sprintf("%s ~ %s 保存失败: %v", r["start"], r["end"], err))
 				} else {
 					totalCount += len(batch)
 				}
@@ -2899,14 +2977,22 @@ func syncSummaryData(ctx context.Context, database *sql.DB, miniProgramName, app
 		time.Sleep(500 * time.Millisecond)
 	}
 
+	stepErr := summarizeStepErrors(stepErrors)
+	fetchStatus := "success"
+	errorInfo := ""
+	if stepErr != nil {
+		fetchStatus = "failed"
+		errorInfo = stepErr.Error()
+	}
+
 	if _, err := database.Exec(`
 		INSERT INTO fetch_log (小程序名称, 小程序ID, 拉取类型, 拉取日期, 状态, 记录数, 错误信息)
-		VALUES (?, ?, 'publisher_adpos_general', ?, 'success', ?, '')
-	`, miniProgramName, appid, endDate, totalCount); err != nil {
+		VALUES (?, ?, 'publisher_adpos_general', ?, ?, ?, ?)
+	`, miniProgramName, appid, endDate, fetchStatus, totalCount, errorInfo); err != nil {
 		logChan <- fmt.Sprintf("⚠️ [%s] 记录日志失败: %v", miniProgramName, err)
 	}
 
-	return totalCount, nil
+	return totalCount, stepErr
 }
 
 func syncDetailData(ctx context.Context, database *sql.DB, miniProgramName, appid, appsecret, accessToken, apiBase, startDate, endDate string, logChan chan<- string) (int, error) {
@@ -2916,6 +3002,7 @@ func syncDetailData(ctx context.Context, database *sql.DB, miniProgramName, appi
 	}
 
 	totalCount := 0
+	stepErrors := make([]string, 0)
 	for _, r := range ranges {
 		select {
 		case <-ctx.Done():
@@ -2926,6 +3013,7 @@ func syncDetailData(ctx context.Context, database *sql.DB, miniProgramName, appi
 		data, err := fetchAllPagesByDateRange(accessToken, "publisher_adunit_general", r["start"], r["end"], appid, appsecret, apiBase)
 		if err != nil {
 			logChan <- fmt.Sprintf("❌ [%s] %s ~ %s: 拉取失败 - %v", miniProgramName, r["start"], r["end"], err)
+			stepErrors = append(stepErrors, fmt.Sprintf("%s ~ %s 拉取失败: %v", r["start"], r["end"], err))
 			continue
 		}
 
@@ -3072,6 +3160,7 @@ func syncDetailData(ctx context.Context, database *sql.DB, miniProgramName, appi
 						父模版类型 = VALUES(父模版类型)`
 				if _, err := database.Exec(query, valueArgs...); err != nil {
 					logChan <- fmt.Sprintf("❌ [%s] %s ~ %s: 保存失败 - %v", miniProgramName, r["start"], r["end"], err)
+					stepErrors = append(stepErrors, fmt.Sprintf("%s ~ %s 保存失败: %v", r["start"], r["end"], err))
 				} else {
 					totalCount += len(batch)
 				}
@@ -3085,14 +3174,22 @@ func syncDetailData(ctx context.Context, database *sql.DB, miniProgramName, appi
 		time.Sleep(500 * time.Millisecond)
 	}
 
+	stepErr := summarizeStepErrors(stepErrors)
+	fetchStatus := "success"
+	errorInfo := ""
+	if stepErr != nil {
+		fetchStatus = "failed"
+		errorInfo = stepErr.Error()
+	}
+
 	if _, err := database.Exec(`
 		INSERT INTO fetch_log (小程序名称, 小程序ID, 拉取类型, 拉取日期, 状态, 记录数, 错误信息)
-		VALUES (?, ?, 'publisher_adunit_general', ?, 'success', ?, '')
-	`, miniProgramName, appid, endDate, totalCount); err != nil {
+		VALUES (?, ?, 'publisher_adunit_general', ?, ?, ?, ?)
+	`, miniProgramName, appid, endDate, fetchStatus, totalCount, errorInfo); err != nil {
 		logChan <- fmt.Sprintf("⚠️ [%s] 记录日志失败: %v", miniProgramName, err)
 	}
 
-	return totalCount, nil
+	return totalCount, stepErr
 }
 
 func syncSettlementData(database *sql.DB, miniProgramName, appid, appsecret, accessToken, apiBase string, logChan chan<- string) error {

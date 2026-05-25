@@ -330,7 +330,10 @@ func MarkFetchJobStepRunning(db *sql.DB, stepID int64, programID int64, programN
 	_, err := db.Exec(`
 UPDATE fetch_job_steps
 SET status = 'running',
-    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+    started_at = CURRENT_TIMESTAMP,
+    finished_at = NULL,
+    error_message = '',
+    retry_count = retry_count + CASE WHEN status = 'failed' THEN 1 ELSE 0 END,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 `, stepID)
@@ -359,7 +362,7 @@ SET status = ?,
     record_count = ?,
     error_message = ?,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = ?
+WHERE id = ? AND status != 'skipped'
 `, status, recordCount, errorMessage, stepID)
 	if err != nil {
 		return err
@@ -368,7 +371,7 @@ WHERE id = ?
 }
 
 func RefreshFetchJobProgress(db *sql.DB, jobID int64) error {
-	var total, completed, failed int
+	var total, completed, failed, processed int
 	if err := db.QueryRow("SELECT COUNT(*) FROM fetch_job_steps WHERE job_id = ?", jobID).Scan(&total); err != nil {
 		return err
 	}
@@ -378,10 +381,13 @@ func RefreshFetchJobProgress(db *sql.DB, jobID int64) error {
 	if err := db.QueryRow("SELECT COUNT(*) FROM fetch_job_steps WHERE job_id = ? AND status = 'failed'", jobID).Scan(&failed); err != nil {
 		return err
 	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM fetch_job_steps WHERE job_id = ? AND status IN ('success', 'failed', 'skipped')", jobID).Scan(&processed); err != nil {
+		return err
+	}
 
 	percent := 0
 	if total > 0 {
-		percent = ((completed + failed) * 100) / total
+		percent = (processed * 100) / total
 	}
 
 	_, err := db.Exec(`
@@ -549,7 +555,23 @@ func EndFetchJob(db *sql.DB, jobID int64) (*FetchJob, error) {
 	if jobstate.IsTerminal(jobstate.JobStatus(job.Status)) {
 		return nil, errors.New("job already terminal")
 	}
-	if _, err := db.Exec(`
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`
+UPDATE fetch_job_steps
+SET status = 'skipped',
+    finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
+    error_message = CASE WHEN COALESCE(error_message, '') = '' THEN '任务已结束' ELSE error_message END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE job_id = ? AND status IN ('pending', 'running')
+`, jobID); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if _, err := tx.Exec(`
 UPDATE fetch_jobs
 SET status = 'ended',
     end_requested = 1,
@@ -557,6 +579,13 @@ SET status = 'ended',
     updated_at = CURRENT_TIMESTAMP
 WHERE id = ?
 `, jobID); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	if err := RefreshFetchJobProgress(db, jobID); err != nil {
 		return nil, err
 	}
 	_ = ReleaseFetchJobLock(db, jobID)
