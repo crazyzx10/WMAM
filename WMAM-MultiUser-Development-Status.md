@@ -1,6 +1,6 @@
 # WMAM Multi-User Development Status
 
-Date: 2026-05-24
+Date: 2026-05-25
 
 This branch implements the first multi-user Web application foundation for WMAM.
 
@@ -105,6 +105,34 @@ This branch implements the first multi-user Web application foundation for WMAM.
 18. Shell layout polish
     - Topbar title copy was removed from the app shell
     - Topbar and sidebar divider lines now share the same 64px border-box height model
+
+## Remaining Stages
+
+The previous eight small follow-up stages are now consolidated into four delivery stages. Each stage should still be implemented, tested, committed, and pushed as one complete unit.
+
+19. Real fetch-path acceptance and data correctness
+    - Verify the configured MySQL path with a real or representative database
+    - Confirm the existing WeChat fetch logic writes all required ad data through the current job runner
+    - Harden interrupt, resume, end, partial failure, lock release, and masked error behavior
+    - Acceptance: admin and ordinary-user fetch flows pass, job summaries match database writes, and secrets do not leak into logs or API responses
+
+20. Admin configuration and recovery hardening
+    - Polish first-use setup guidance and admin recovery-code usability
+    - Re-check MySQL config, mini-program config, user management, and destructive confirmations
+    - Verify encrypted backup export/import overwrite behavior, restored accounts, and restored field encryption key handling
+    - Acceptance: an administrator can recover from a wrong MySQL config and restore a backup without code-level intervention
+
+21. UI polish and permission experience
+    - Polish desktop spacing, alignment, empty states, loading states, error states, dark mode, tables, modals, and long-text handling
+    - Keep ordinary-user screens focused on fetch execution and operation logs only
+    - Re-check direct URL access, hidden admin-only actions, operation log pagination, filters, and detail views
+    - Acceptance: administrator and ordinary-user workflows feel coherent, stable, and consistent in the browser
+
+22. Release verification and handoff
+    - Run full regression: frontend build, Go tests, release build, startup behavior, clean-data smoke test, and single-binary run check
+    - Update README, deployment guide, and status docs with final run commands, default account notes, recovery notes, and known limits
+    - Prepare the first usable release marker after final acceptance
+    - Acceptance: the single binary can be copied to a server or local PC and used according to the documented deployment guide
 
 ## Verification
 
