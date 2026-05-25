@@ -102,6 +102,10 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Login input icons now reserve dedicated left padding
     - Password inputs reserve right padding for browser password visibility controls
 
+18. Shell layout polish
+    - Topbar title copy was removed from the app shell
+    - Topbar and sidebar divider lines now share the same 64px border-box height model
+
 ## Verification
 
 Run from `go-app/web`:

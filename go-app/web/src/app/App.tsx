@@ -272,12 +272,8 @@ function AppLayout() {
       </aside>
 
       <div className={["transition-[padding-left]", isSidebarCollapsed ? "pl-20" : "pl-64"].join(" ")}>
-        <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-6">
-            <div>
-              <div className="text-sm text-muted-foreground">微信小程序广告数据管理</div>
-              <h1 className="text-lg font-semibold">多人控制台</h1>
-            </div>
+        <header className="sticky top-0 z-10 h-16 border-b border-border bg-background/90 backdrop-blur">
+          <div className="mx-auto flex h-full max-w-[1080px] items-center justify-end px-6">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
