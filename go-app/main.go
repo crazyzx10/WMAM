@@ -435,7 +435,7 @@ func initDatabase(db *sql.DB) error {
 			locked_by VARCHAR(50) COMMENT '锁定者用户名',
 			locked_at DATETIME COMMENT '锁定时间',
 			expires_at DATETIME COMMENT '锁过期时间',
-			CONSTRAINT single_row CHECK (id = 1)
+			CONSTRAINT chk_fetch_lock_single_row CHECK (id = 1)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='拉取锁表'`,
 		`CREATE TABLE IF NOT EXISTS fetch_progress (
 			id INT PRIMARY KEY DEFAULT 1,
@@ -450,7 +450,7 @@ func initDatabase(db *sql.DB) error {
 			locked_by VARCHAR(50) COMMENT '当前锁定者',
 			locked_at DATETIME COMMENT '锁定时间',
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			CONSTRAINT single_row CHECK (id = 1)
+			CONSTRAINT chk_fetch_progress_single_row CHECK (id = 1)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='拉取进度表'`,
 	}
 
