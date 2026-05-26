@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Copy, DatabaseZap, Download, RotateCcw, Save, ShieldCheck } from "lucide-react";
+import { Copy, DatabaseZap, Download, RotateCcw, Save, ShieldCheck, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card, CardTitle } from "../components/ui/Card";
@@ -254,10 +254,14 @@ export function SystemPage() {
             <input className="field" placeholder="MySQL 地址" value={config.host} onChange={(event) => update("host", event.target.value)} />
             <input
               className="field"
-              type="number"
+              type="text"
+              inputMode="numeric"
               placeholder="端口"
-              value={config.port}
-              onChange={(event) => update("port", Number(event.target.value))}
+              value={config.port || ""}
+              onChange={(event) => {
+                const value = event.target.value.replace(/\D/g, "");
+                update("port", value ? Number(value) : 0);
+              }}
             />
             <input className="field" placeholder="数据库名" value={config.database} onChange={(event) => update("database", event.target.value)} />
           </div>
@@ -346,7 +350,16 @@ export function SystemPage() {
               value={backupPassword}
               onChange={(event) => setBackupPassword(event.target.value)}
             />
-            <input className="field" type="file" accept=".wmam" onChange={(event) => setBackupFile(event.target.files?.[0] ?? null)} />
+            <label className="flex h-10 cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-sm transition hover:bg-muted/70">
+              <span className={backupFile ? "truncate text-foreground" : "truncate text-muted-foreground"}>
+                {backupFile ? backupFile.name : "选择备份文件（.wmam）"}
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-2 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background">
+                <Upload className="h-3.5 w-3.5" />
+                选择文件
+              </span>
+              <input className="sr-only" type="file" accept=".wmam" onChange={(event) => setBackupFile(event.target.files?.[0] ?? null)} />
+            </label>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" disabled={!backupPassword || !backupAdminPassword} onClick={handleExport}>
                 导出系统配置

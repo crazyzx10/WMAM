@@ -183,16 +183,16 @@ export function UsersPage() {
                   <td className="px-4 py-3">
                     <Badge tone={user.must_change_password ? "warning" : "success"}>{user.must_change_password ? "需要" : "不需要"}</Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="w-[560px] px-4 py-3">
                     {user.role === "admin" ? (
                       <span className="text-muted-foreground">唯一管理员受保护</span>
                     ) : (
-                      <div className="flex min-w-[420px] flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleToggle(user)}>
+                      <div className="flex min-w-[520px] flex-nowrap items-center gap-2 whitespace-nowrap">
+                        <Button className="shrink-0" variant="outline" size="sm" onClick={() => handleToggle(user)}>
                           {user.status === "active" ? "禁用" : "启用"}
                         </Button>
                         <input
-                          className="field field-xs w-40"
+                          className="field field-xs w-40 shrink-0"
                           type="password"
                           placeholder="新密码"
                           value={resetPasswordById[user.id] ?? ""}
@@ -204,6 +204,7 @@ export function UsersPage() {
                           }
                         />
                         <Button
+                          className="shrink-0"
                           variant="outline"
                           size="sm"
                           disabled={(resetPasswordById[user.id] ?? "").length < 8}
@@ -211,7 +212,7 @@ export function UsersPage() {
                         >
                           重置密码
                         </Button>
-                        <Button variant="danger" size="sm" onClick={() => handleDelete(user)}>
+                        <Button className="shrink-0" variant="danger" size="sm" onClick={() => handleDelete(user)}>
                           <Trash2 className="h-4 w-4" />
                           删除
                         </Button>

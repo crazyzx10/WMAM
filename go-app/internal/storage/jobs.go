@@ -320,6 +320,10 @@ ORDER BY id ASC
 		); err != nil {
 			return nil, err
 		}
+		step.StartedAt = formatDisplayTime(step.StartedAt)
+		step.FinishedAt = formatDisplayTime(step.FinishedAt)
+		step.CreatedAt = formatDisplayTime(step.CreatedAt)
+		step.UpdatedAt = formatDisplayTime(step.UpdatedAt)
 		step.AppIDMasked = MaskAppID(appID)
 		steps = append(steps, step)
 	}
@@ -663,6 +667,10 @@ func scanFetchJob(row rowScanner) (*FetchJob, error) {
 	if currentProgramID.Valid {
 		job.CurrentProgramID = &currentProgramID.Int64
 	}
+	job.StartedAt = formatDisplayTime(job.StartedAt)
+	job.FinishedAt = formatDisplayTime(job.FinishedAt)
+	job.CreatedAt = formatDisplayTime(job.CreatedAt)
+	job.UpdatedAt = formatDisplayTime(job.UpdatedAt)
 	job.InterruptRequested = interruptRequested == 1
 	job.EndRequested = endRequested == 1
 	return &job, nil

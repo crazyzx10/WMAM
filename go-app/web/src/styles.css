@@ -65,6 +65,10 @@ body {
     sans-serif;
 }
 
+input[type="checkbox"] {
+  accent-color: rgb(var(--foreground));
+}
+
 .field {
   height: 40px;
   min-width: 0;

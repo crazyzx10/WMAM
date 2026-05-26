@@ -452,6 +452,7 @@ LIMIT ? OFFSET ?
 		if nullableUserID.Valid {
 			item.UserID = &nullableUserID.Int64
 		}
+		item.CreatedAt = formatDisplayTime(item.CreatedAt)
 		logs = append(logs, item)
 	}
 
@@ -480,7 +481,7 @@ func CountTodayFetchJobs(db *sql.DB) (int64, error) {
 func LastFetchTime(db *sql.DB) (string, error) {
 	var value string
 	err := db.QueryRow("SELECT COALESCE(MAX(started_at), '') FROM fetch_jobs").Scan(&value)
-	return value, err
+	return formatDisplayTime(value), err
 }
 
 type rowScanner interface {
@@ -505,6 +506,9 @@ func scanSystemUser(row rowScanner) (*SystemUser, error) {
 		return nil, err
 	}
 	user.MustChangePassword = mustChange == 1
+	user.CreatedAt = formatDisplayTime(user.CreatedAt)
+	user.UpdatedAt = formatDisplayTime(user.UpdatedAt)
+	user.LastLoginAt = formatDisplayTime(user.LastLoginAt)
 	return user, nil
 }
 

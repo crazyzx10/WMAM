@@ -141,6 +141,12 @@ func publishJobStateEvent(jobID int64) {
 }
 
 func init() {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("UTC+8", 8*60*60)
+	}
+	time.Local = location
+
 	exePath, err := os.Executable()
 	if err != nil {
 		exePath = os.Args[0]
