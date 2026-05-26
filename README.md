@@ -2,7 +2,7 @@
 
 WMAM 是一个微信小程序广告数据拉取和管理工具，支持多小程序批量管理、多人登录、权限隔离、手动拉取任务、实时进度、任务历史摘要和操作审计日志。
 
-部署和运行请优先查看 [WMAM-Deployment-Guide.md](WMAM-Deployment-Guide.md)。
+部署和运行请优先查看 [WMAM-Deployment-Guide.md](WMAM-Deployment-Guide.md)。当前多用户 Web 版第一版已经进入可交付状态，单个 Go 可执行程序会内嵌前端页面。
 
 ## 功能特性
 
@@ -75,7 +75,7 @@ http://127.0.0.1:28384/
 admin / admin123
 ```
 
-首次登录后请立刻修改密码，并保存首次启动日志中显示的管理员恢复码。
+首次登录后请立刻修改密码，并保存首次启动日志中显示的管理员恢复码。如果恢复码遗失，管理员登录后可以在“系统配置 / 管理员恢复码”中重新生成。
 
 ## 发布构建
 
@@ -93,7 +93,30 @@ Linux/macOS：
 ./scripts/build-release.sh linux-amd64
 ```
 
-发布产物位于 `dist/`，包含可执行程序、`config.yaml.example`、README 和部署说明。
+发布产物位于 `dist/`，包含可执行程序、`config.yaml.example`、README 和部署说明。Windows 本机运行时进入 `dist/wmam-windows-amd64/` 后双击 `wmam-server.exe` 即可启动；Linux 服务器运行 `./wmam-server`。
+
+### 发布前验证清单
+
+本仓库当前交付前使用以下命令验证：
+
+```bash
+cd go-app/web
+npm run build
+cd ..
+go test ./...
+```
+
+Windows PowerShell：
+
+```powershell
+.\scripts\build-release.ps1 -Target current
+```
+
+打包后访问：
+
+```text
+http://127.0.0.1:28384/login
+```
 
 ## 使用流程
 
@@ -146,6 +169,13 @@ WMAM/
 3. WMAM 启动后不会主动连接 MySQL，只有测试配置、保存配置或执行拉取时才连接。
 4. 迁移服务器时，推荐使用网页端“系统配置”的加密备份导出/导入。
 5. 确保微信小程序有广告主权限。
+
+## 已知限制
+
+- 第一版不包含 Docker 部署。
+- 实时详细执行日志只保留在当前浏览器页面，页面刷新后清空；任务摘要和审计日志会保存在本地 SQLite。
+- 操作日志筛选为当前页轻量筛选，历史记录很多时先通过分页查看。
+- 备份文件密码无法找回，请单独保存。
 
 ## 许可证
 

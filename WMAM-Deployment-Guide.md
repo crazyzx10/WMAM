@@ -216,7 +216,7 @@ sudo systemctl status wmam
 
 推荐使用网页端“系统配置”里的加密备份导出：
 
-1. 输入备份文件密码。
+1. 输入管理员密码和备份文件密码。
 2. 导出 `.wmam` 备份文件。
 3. 在新环境导入该文件。
 
@@ -224,7 +224,45 @@ sudo systemctl status wmam
 
 备份文件密码无法找回。
 
-## 9. 常见问题
+## 9. 单文件运行验收
+
+Windows 发布目录示例：
+
+```text
+dist/wmam-windows-amd64/
+  wmam-server.exe
+  config.yaml.example
+  README.md
+  WMAM-Deployment-Guide.md
+```
+
+验收步骤：
+
+1. 进入发布目录。
+2. 如需修改监听地址或数据目录，将 `config.yaml.example` 复制为 `config.yaml` 后调整。
+3. 双击 `wmam-server.exe`，或在命令行执行：
+
+```powershell
+.\wmam-server.exe
+```
+
+4. 浏览器访问：
+
+```text
+http://127.0.0.1:28384/
+```
+
+5. 使用默认管理员 `admin / admin123` 登录，首次登录后修改密码并保存恢复码。
+
+## 10. 已知限制
+
+- 第一版不包含 Docker 部署。
+- WMAM 自身配置和任务摘要保存在本地 SQLite；广告明细数据写入你在网页中配置的 MySQL。
+- 实时详细执行日志只保留在当前浏览器页面，页面刷新后清空；历史任务摘要和审计日志会保存。
+- 操作日志筛选为当前页轻量筛选，记录很多时通过分页查看。
+- 备份文件密码无法找回。
+
+## 11. 常见问题
 
 ### 浏览器打不开
 

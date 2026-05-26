@@ -1,6 +1,6 @@
 # WMAM Multi-User Development Status
 
-Date: 2026-05-25
+Date: 2026-05-26
 
 This branch implements the first multi-user Web application foundation for WMAM.
 
@@ -129,15 +129,15 @@ This branch implements the first multi-user Web application foundation for WMAM.
     - Mini-program and user management tables now handle long names and IDs better, with confirmation before disabling a program or user
     - System, mini-program, and user forms now use responsive grid behavior and consistent success/error feedback
 
+22. Release verification and handoff
+    - README, deployment guide, and status docs document final run commands, default account notes, recovery notes, backup notes, and known limits
+    - Full regression includes frontend build, Go tests, release build, startup behavior, clean-data smoke test, and single-binary run check
+    - Release packaging copies the final README and deployment guide into the release directory
+    - Acceptance: the single binary can be copied to a server or local PC and used according to the documented deployment guide
+
 ## Remaining Stages
 
-The previous eight small follow-up stages are now consolidated into delivery stages. Each stage should still be implemented, tested, committed, and pushed as one complete unit.
-
-22. Release verification and handoff
-    - Run full regression: frontend build, Go tests, release build, startup behavior, clean-data smoke test, and single-binary run check
-    - Update README, deployment guide, and status docs with final run commands, default account notes, recovery notes, and known limits
-    - Prepare the first usable release marker after final acceptance
-    - Acceptance: the single binary can be copied to a server or local PC and used according to the documented deployment guide
+None. The multi-user Web first version is feature-complete for the agreed lightweight delivery scope.
 
 ## Verification
 
@@ -157,8 +157,26 @@ go run .
 
 The application listens on `http://127.0.0.1:28384` by default.
 
+Build release directories from the repository root:
+
+```powershell
+.\scripts\build-release.ps1 -Target current
+.\scripts\build-release.ps1 -Target linux-amd64
+```
+
+Linux/macOS:
+
+```bash
+./scripts/build-release.sh current
+./scripts/build-release.sh linux-amd64
+```
+
+The Windows release binary is `dist/wmam-windows-amd64/wmam-server.exe`.
+
 ## Notes
 
 - MySQL is only connected when an admin tests/saves MySQL config or when a fetch job runs.
 - The current runner updates job summaries and step status. Detailed realtime log persistence is intentionally not implemented.
 - Docker deployment is intentionally not included in the first version.
+- Default administrator is `admin / admin123`; first login should change the password immediately.
+- Admin recovery code is printed once during first startup and can later be regenerated from the System page.
