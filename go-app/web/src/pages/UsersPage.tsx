@@ -167,7 +167,7 @@ export function UsersPage() {
                 <th className="px-4 py-3 font-medium">角色</th>
                 <th className="px-4 py-3 font-medium">状态</th>
                 <th className="px-4 py-3 font-medium">首次改密</th>
-                <th className="px-4 py-3 font-medium">操作</th>
+                <th className="w-[360px] px-4 py-3 font-medium">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -183,16 +183,17 @@ export function UsersPage() {
                   <td className="px-4 py-3">
                     <Badge tone={user.must_change_password ? "warning" : "success"}>{user.must_change_password ? "需要" : "不需要"}</Badge>
                   </td>
-                  <td className="w-[560px] px-4 py-3">
+                  <td className="w-[360px] px-4 py-3">
                     {user.role === "admin" ? (
                       <span className="text-muted-foreground">唯一管理员受保护</span>
                     ) : (
-                      <div className="flex min-w-[520px] flex-nowrap items-center gap-2 whitespace-nowrap">
+                      <div className="flex w-max flex-nowrap items-center gap-2 whitespace-nowrap">
                         <Button className="shrink-0" variant="outline" size="sm" onClick={() => handleToggle(user)}>
                           {user.status === "active" ? "禁用" : "启用"}
                         </Button>
                         <input
-                          className="field field-xs w-40 shrink-0"
+                          className="field field-xs shrink-0"
+                          style={{ width: 96 }}
                           type="password"
                           placeholder="新密码"
                           value={resetPasswordById[user.id] ?? ""}
