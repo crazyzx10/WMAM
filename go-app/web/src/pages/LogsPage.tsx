@@ -291,7 +291,7 @@ export function LogsPage() {
               </div>
             </div>
             <TableShell>
-              <table className="min-w-[760px] table-fixed text-left text-sm">
+              <table className="w-full min-w-[760px] table-fixed text-left text-sm">
                 <colgroup>
                   <col className="w-[168px]" />
                   <col className="w-[108px]" />
