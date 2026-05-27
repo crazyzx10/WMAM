@@ -6,14 +6,14 @@
   --foreground: 17 17 17;
   --card: 255 255 255;
   --card-foreground: 17 17 17;
-  --sidebar: 250 250 250;
-  --muted: 238 238 238;
-  --muted-foreground: 102 102 102;
-  --border: 229 229 229;
+  --sidebar: 255 255 255;
+  --muted: 245 245 245;
+  --muted-foreground: 92 92 92;
+  --border: 235 235 235;
   --ring: 17 17 17;
-  --success: 34 197 94;
-  --warning: 245 158 11;
-  --danger: 239 68 68;
+  --success: 22 163 74;
+  --warning: 171 87 10;
+  --danger: 238 0 0;
   --log: 250 250 250;
 }
 
@@ -23,10 +23,10 @@
   --foreground: 250 250 250;
   --card: 17 17 17;
   --card-foreground: 250 250 250;
-  --sidebar: 17 17 17;
-  --muted: 31 31 31;
+  --sidebar: 14 14 14;
+  --muted: 32 32 32;
   --muted-foreground: 161 161 170;
-  --border: 39 39 42;
+  --border: 42 42 42;
   --ring: 250 250 250;
   --success: 74 222 128;
   --warning: 251 191 36;
@@ -54,15 +54,29 @@
   box-sizing: border-box;
 }
 
+html {
+  background: rgb(var(--background));
+}
+
 body {
   margin: 0;
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
   font-family:
+    Inter,
+    Geist,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
     "PingFang SC",
     "Microsoft YaHei",
     sans-serif;
+  font-feature-settings:
+    "ss01" 1,
+    "ss02" 1,
+    "cv01" 1;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 input[type="checkbox"] {
@@ -75,12 +89,17 @@ input[type="checkbox"] {
   width: 100%;
   border-radius: 6px;
   border: 1px solid rgb(var(--border));
-  background: rgb(var(--background));
+  background: rgb(var(--card));
   padding: 0 12px;
   color: rgb(var(--foreground));
   font-size: 14px;
   line-height: 20px;
   outline: none;
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.02);
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .field-sm {
@@ -99,8 +118,19 @@ input[type="checkbox"] {
   padding-right: 44px;
 }
 
+.field::placeholder {
+  color: rgb(var(--muted-foreground));
+}
+
+.field:hover:not(:disabled) {
+  border-color: rgb(var(--muted-foreground) / 0.46);
+}
+
 .field:focus {
-  box-shadow: 0 0 0 2px rgb(var(--ring) / 0.18);
+  border-color: rgb(var(--ring));
+  box-shadow:
+    0 0 0 3px rgb(var(--ring) / 0.12),
+    inset 0 1px 1px rgb(0 0 0 / 0.02);
 }
 
 .field:disabled {
@@ -111,11 +141,27 @@ input[type="checkbox"] {
 
 .table-row {
   border-top: 1px solid rgb(var(--border));
-  transition: background-color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 .table-row:hover {
-  background: rgb(var(--muted) / 0.38);
+  background: rgb(var(--muted) / 0.52);
+}
+
+th {
+  font-weight: 500;
+}
+
+td,
+th {
+  vertical-align: middle;
+}
+
+::selection {
+  background: rgb(var(--foreground));
+  color: rgb(var(--background));
 }
 
 @keyframes toast-in {

@@ -350,7 +350,7 @@ export function FetchPage() {
         </CardHeader>
         <TableShell className="mt-0">
           <table className="min-w-full border-collapse text-sm">
-            <thead className="bg-muted/60 text-left text-muted-foreground">
+            <thead className="bg-muted/45 text-left text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">小程序名称</th>
                 <th className="px-4 py-3 font-medium">总状态</th>
@@ -405,7 +405,7 @@ export function FetchPage() {
         <CardHeader>
           <CardTitle>实时日志</CardTitle>
         </CardHeader>
-        <div className="h-[360px] overflow-auto rounded-md border border-border bg-log p-4 font-mono text-sm leading-7 text-muted-foreground whitespace-pre-wrap break-words">
+        <div className="h-[360px] overflow-auto rounded-md border border-border bg-log p-4 font-mono text-[13px] leading-7 text-muted-foreground whitespace-pre-wrap break-words shadow-[inset_0_1px_1px_rgb(0_0_0/0.02)]">
           {logs.map((line, index) => (
             <div key={`${line}-${index}`}>{line}</div>
           ))}

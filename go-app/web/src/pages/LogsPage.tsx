@@ -226,7 +226,7 @@ export function LogsPage() {
             </div>
             <TableShell>
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-muted/60 text-muted-foreground">
+                <thead className="bg-muted/45 text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">任务</th>
                     <th className="px-4 py-3 font-medium">状态</th>
@@ -292,7 +292,7 @@ export function LogsPage() {
             </div>
             <TableShell>
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-muted/60 text-muted-foreground">
+                <thead className="bg-muted/45 text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">时间</th>
                     <th className="px-4 py-3 font-medium">用户</th>
@@ -332,7 +332,7 @@ export function LogsPage() {
 
       {detail || detailLoading || detailError ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 px-6 backdrop-blur-sm">
-          <div className="max-h-[86vh] w-full max-w-[920px] overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl">
+          <div className="max-h-[86vh] w-full max-w-[920px] overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-[0_1px_1px_rgb(0_0_0/0.04),0_8px_16px_-4px_rgb(0_0_0/0.12),0_24px_32px_-8px_rgb(0_0_0/0.10)]">
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div>
                 <h2 className="text-base font-semibold">任务详情{detail ? ` #${detail.job.id}` : ""}</h2>
@@ -388,7 +388,7 @@ export function LogsPage() {
 
                   <TableShell className="mt-0">
                     <table className="min-w-full text-left text-sm">
-                      <thead className="bg-muted/60 text-muted-foreground">
+                      <thead className="bg-muted/45 text-muted-foreground">
                         <tr>
                           <th className="px-4 py-3 font-medium">小程序</th>
                           <th className="px-4 py-3 font-medium">步骤</th>

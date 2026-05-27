@@ -56,10 +56,10 @@ export function LoginPage() {
 
       <Card className="w-full max-w-[420px] p-8">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-foreground font-semibold text-background">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-foreground font-semibold text-background shadow-[0_1px_1px_rgb(0_0_0/0.08),0_8px_16px_-10px_rgb(0_0_0/0.35)]">
             W
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">WMAM</h1>
+          <h1 className="text-2xl font-semibold">WMAM</h1>
           <p className="mt-2 text-sm text-muted-foreground">微信小程序广告数据管理</p>
         </div>
 

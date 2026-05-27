@@ -178,7 +178,7 @@ export function ProgramsPage() {
         <CardTitle>小程序列表</CardTitle>
         <TableShell>
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-muted/60 text-muted-foreground">
+            <thead className="bg-muted/45 text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">名称</th>
                 <th className="px-4 py-3 font-medium">AppID</th>

@@ -217,7 +217,7 @@ function AppLayout() {
     <div className="min-h-screen bg-background text-foreground">
       <aside
         className={[
-          "fixed inset-y-0 left-0 z-20 flex flex-col border-r border-border bg-sidebar transition-[width]",
+          "fixed inset-y-0 left-0 z-20 flex flex-col border-r border-border bg-sidebar/95 shadow-[1px_0_0_rgb(255_255_255/0.02)] transition-[width]",
           isSidebarCollapsed ? "w-20" : "w-64"
         ].join(" ")}
       >
@@ -227,11 +227,11 @@ function AppLayout() {
             isSidebarCollapsed ? "justify-center px-3" : ""
           ].join(" ")}
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-sm font-semibold text-background">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground text-sm font-semibold text-background shadow-[0_1px_1px_rgb(0_0_0/0.08)]">
             W
           </div>
           <div className={isSidebarCollapsed ? "sr-only" : ""}>
-            <div className="font-semibold tracking-tight">WMAM</div>
+            <div className="font-semibold">WMAM</div>
             <div className="text-xs text-muted-foreground">{user?.username ?? "未登录"}</div>
           </div>
         </div>
@@ -242,10 +242,10 @@ function AppLayout() {
               to={item.to}
               className={({ isActive }) =>
                 [
-                  "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition",
+                  "flex h-9 items-center gap-3 rounded-md border border-transparent px-3 text-sm transition-[background-color,border-color,color,box-shadow]",
                   isSidebarCollapsed ? "justify-center px-0" : "",
                   isActive
-                    ? "bg-muted font-medium text-foreground"
+                    ? "border-border bg-card font-medium text-foreground shadow-[0_1px_1px_rgb(0_0_0/0.03)]"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 ].join(" ")
               }
@@ -272,7 +272,7 @@ function AppLayout() {
       </aside>
 
       <div className={["transition-[padding-left]", isSidebarCollapsed ? "pl-20" : "pl-64"].join(" ")}>
-        <header className="sticky top-0 z-10 h-16 border-b border-border bg-background/90 backdrop-blur">
+        <header className="sticky top-0 z-10 h-16 border-b border-border bg-background/80 backdrop-blur-xl">
           <div className="mx-auto flex h-full max-w-[1080px] items-center justify-end px-6">
             <div className="flex items-center gap-2">
               <Button
@@ -285,16 +285,16 @@ function AppLayout() {
                 {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
               </Button>
               <Button variant="outline" onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="h-4 w-4" />
                 退出登录
               </Button>
             </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1080px] px-6 py-8">
+        <main className="mx-auto max-w-[1080px] px-6 py-7">
           {showSetupGuide ? (
-            <div className="mb-5 rounded-lg border border-border bg-card p-5 text-card-foreground">
+            <div className="mb-5 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-[0_1px_1px_rgb(0_0_0/0.03),0_2px_2px_rgb(0_0_0/0.04)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-base font-semibold">初始化检查</h2>
