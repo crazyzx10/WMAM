@@ -150,6 +150,15 @@ input[type="checkbox"] {
   background: rgb(var(--muted) / 0.52);
 }
 
+.audit-description-preview {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 th {
   font-weight: 500;
 }

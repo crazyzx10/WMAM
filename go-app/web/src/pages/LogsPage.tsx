@@ -291,7 +291,14 @@ export function LogsPage() {
               </div>
             </div>
             <TableShell>
-              <table className="min-w-full text-left text-sm">
+              <table className="min-w-[760px] table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[168px]" />
+                  <col className="w-[108px]" />
+                  <col className="w-[160px]" />
+                  <col />
+                  <col className="w-[96px]" />
+                </colgroup>
                 <thead className="bg-muted/45 text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-medium">时间</th>
@@ -307,7 +314,11 @@ export function LogsPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{log.created_at ?? log.createdAt}</td>
                       <td className="px-4 py-3">{log.username || "-"}</td>
                       <td className="px-4 py-3 font-mono text-xs">{log.action}</td>
-                      <td className="max-w-[420px] break-words px-4 py-3">{log.description || "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="audit-description-preview" title={log.description || "-"}>
+                          {log.description || "-"}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <Badge tone={log.result === "success" ? "success" : "danger"}>
                           {log.result === "success" ? "成功" : "失败"}
