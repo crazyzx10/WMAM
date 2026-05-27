@@ -62,6 +62,21 @@ func TestRedactRuntimeErrorMasksSecretsAndQueryValues(t *testing.T) {
 	}
 }
 
+func TestJobAuditDescriptionIncludesFailureDetail(t *testing.T) {
+	got := jobAuditDescription("初始化 MySQL 表失败", "Error 3822 (HY000): Duplicate check constraint name 'single_row'")
+	want := "初始化 MySQL 表失败：Error 3822 (HY000): Duplicate check constraint name 'single_row'"
+	if got != want {
+		t.Fatalf("jobAuditDescription() = %q, want %q", got, want)
+	}
+}
+
+func TestJobAuditDescriptionAvoidsDuplicatingSameMessage(t *testing.T) {
+	got := jobAuditDescription("任务锁不可用", "任务锁不可用")
+	if got != "任务锁不可用" {
+		t.Fatalf("jobAuditDescription() = %q", got)
+	}
+}
+
 func TestGetLatestDataDateUsesChineseDateColumn(t *testing.T) {
 	database, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

@@ -1348,6 +1348,30 @@ func redactSensitiveText(message string, secrets ...string) string {
 	return message
 }
 
+func jobAuditDescription(stage string, detail string) string {
+	stage = strings.TrimSpace(stage)
+	detail = strings.Join(strings.Fields(strings.TrimSpace(detail)), " ")
+
+	switch {
+	case stage == "":
+		return truncateAuditDescription(detail)
+	case detail == "":
+		return truncateAuditDescription(stage)
+	case stage == detail:
+		return truncateAuditDescription(stage)
+	default:
+		return truncateAuditDescription(stage + "：" + detail)
+	}
+}
+
+func truncateAuditDescription(message string) string {
+	if len([]rune(message)) <= 500 {
+		return message
+	}
+	runes := []rune(message)
+	return string(runes[:500]) + "..."
+}
+
 func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 	failures := make([]string, 0)
 	failJob := func(errorSummary string, auditDescription string) {
@@ -1359,7 +1383,7 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		})
 		publishJobStateEvent(jobID)
 		if auditDescription != "" {
-			_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), auditDescription, "failed", "", "")
+			_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, "JOB_FAILED", "job", fmt.Sprintf("%d", jobID), jobAuditDescription(auditDescription, errorSummary), "failed", "", "")
 		}
 	}
 
@@ -1610,6 +1634,10 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		result = "failed"
 		errorSummary = strings.Join(failures, "; ")
 	}
+	auditDescription := storage.JobStatusLabel(finalStatus)
+	if errorSummary != "" {
+		auditDescription = jobAuditDescription("拉取任务失败", errorSummary)
+	}
 	_, _ = storage.SetFetchJobTerminal(systemDB, jobID, finalStatus, errorSummary)
 	jobEvents.publish(jobID, gin.H{
 		"type":    "complete",
@@ -1617,7 +1645,7 @@ func runFetchJob(jobID int64, operatorID int64, operatorName string) {
 		"message": storage.JobStatusLabel(finalStatus),
 	})
 	publishJobStateEvent(jobID)
-	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, action, "job", fmt.Sprintf("%d", jobID), storage.JobStatusLabel(finalStatus), result, "", "")
+	_ = storage.CreateAuditLog(systemDB, &operatorID, operatorName, action, "job", fmt.Sprintf("%d", jobID), auditDescription, result, "", "")
 }
 
 func localCurrentJobHandler(c *gin.Context) {
