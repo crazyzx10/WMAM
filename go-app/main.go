@@ -3456,6 +3456,14 @@ func main() {
 		log.Fatalf("加载前端资源失败: %v", err)
 	}
 	r.StaticFS("/assets", http.FS(assetsFS))
+	r.GET("/favicon.svg", func(c *gin.Context) {
+		icon, err := frontendFS.ReadFile("frontend/favicon.svg")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/svg+xml", icon)
+	})
 	r.GET("/", serveFrontendIndex)
 	r.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
